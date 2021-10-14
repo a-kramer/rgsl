@@ -118,8 +118,6 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   assert(tspan);
   int nt=tspan->size;
   int ny=(int) sys.dimension;
-  assert(Yout->size1 == N);
-  assert(Yout->size2 == ny);
   gsl_vector *y=gsl_vector_alloc(ny);
   gsl_vector_memcpy(y,y0);
   
@@ -317,7 +315,7 @@ void test_evaluation(gsl_odeiv2_system sys, jacp dfdp, gsl_vector *y0, gsl_vecto
    The possible command line options are documented in the [README.md](../README.md) .
 */
 Rdata /* `EXIT_SUCESS` if all files are found and integration succeeds, default `abort()` signal otherwise.*/
-r_gsl_odeiv(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){ 
+r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){ 
   int i=0;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   assert(IS_CHARACTER(model_name));
