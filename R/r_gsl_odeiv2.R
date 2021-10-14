@@ -17,6 +17,7 @@
 #' @param p a matrix, each column is a valid parameter set for the model
 #' @return the solution trajectories y(t;p) for all p[,k] (3-dim-array)
 #' @keywords ODE
+#' @useDynLib rgsl, odeiv=r_gsl_odeiv2
 #' @export
 #' @examples
 #' y0 <- c(0,1)
