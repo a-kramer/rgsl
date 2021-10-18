@@ -156,6 +156,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
     }
     if (status!=GSL_SUCCESS) break;
   }
+  gsl_odeiv2_driver_reset(driver);
   return status;
 }
 
