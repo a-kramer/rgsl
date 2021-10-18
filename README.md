@@ -135,9 +135,12 @@ ${MODEL}_jac();
 
 ### Example File
 
-See the example file [HarmonicOscillator](./HarmonicOscillator_gvf.h)
+See the example file [HarmonicOscillator](./HarmonicOscillator_gvf.c)
 to inspect an auto-generated right-hand-side and Jacobian function
 compatible with the solvers from the gsl.
+
+The example script [HarmonicOscillator.R](./HarmonicOscillator.R)
+contains a `demo()` function.
 
 These C code files (for the gsl module
 [odeiv2](https://www.gnu.org/software/gsl/doc/html/ode-initval.html))
