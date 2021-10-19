@@ -11,6 +11,8 @@ solver wil be called _m_ times.
 
 The result is returned to R as a 3-dimensional array.
 
+This Project was [funded bu the EU](./ACKNOWLEDGMENTS.md) as part of the [Human Brain Project](https://www.humanbrainproject.eu/en/) and [EBRAINS](https://ebrains.eu/) infrastructure.
+
 ## Install
 
 Using the `remotes` package:
