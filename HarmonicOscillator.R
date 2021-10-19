@@ -6,9 +6,9 @@ demo<-function(){
     if (!file.exists(so)){
         system2("gcc",sprintf("%s -o %s %s_gvf.c %s",CFLAGS,so,name,LIBS))
     }
-    t <- seq(0,130,length.out=1200)
+    t <- seq(0,13,length.out=120)
     y0 <- c(0,1)
-    N <- 64
+    N <- 10
     p <- matrix(c(1,0,0.1),nrow=3,ncol=N)
     for (i in 1:N) {
         p[2,i]=(i-1)/N
