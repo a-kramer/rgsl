@@ -12,7 +12,9 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <Rdefines.h>
-
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #define FREE_ON_SUCCESS 1
 #define KEEP_ON_SUCCESS 2
 
@@ -133,7 +135,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   
   for (j=1; j<nt; j++){
     tf=gsl_vector_get(tspan,j);
-    printf("[%s] t=%f -> %f\n",__func__,t,tf);
+    //printf("[%s] t=%f -> %f\n",__func__,t,tf);
     status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
     //report any error codes to the R user
     switch (status){
@@ -209,20 +211,25 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){
   // load system from file and test it
   jacp dfdp;
   gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), ny, REAL(p), &dfdp);
-  
+  printf("[%s] system dimension: %li\n",__func__,sys.dimension);
   //test_evaluation(sys,dfdp,&(initial_value.vector),&(ode_parameter.vector));
 
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
-  gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+  gsl_odeiv2_driver *driver;
   // most CPU work happens here:
   Rdata Y = PROTECT(alloc3DArray(REALSXP,ny,nt,N));
   double *ydata;
   size_t nyt=nt*ny;
   gsl_matrix_view y;
   int status;
+  ydata = REAL(Y);
+
+#pragma omp parallel for private(driver,y) firstprivate(sys)
   for (i=0;i<N;i++){
-    printf("[%s] solving %i of %li.\n",__func__,i,N);
-    ydata = REAL(Y);
+    driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+    //printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+    fflush(stdout);
+    //printf("[%s] solving %i of %li.\n",__func__,i,N);
     y=gsl_matrix_view_array(&(ydata[i*nyt]),nt,ny);
     sys.params = gsl_matrix_ptr(&(ode_parameter.matrix),i,0);
     status=simulate_timeseries
@@ -232,8 +239,8 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){
        &(t.vector),
        &(y.matrix));
     assert(status==GSL_SUCCESS);
+    gsl_odeiv2_driver_free(driver);
   }
-  gsl_odeiv2_driver_free(driver);
   UNPROTECT(1);
   return Y;
 }
