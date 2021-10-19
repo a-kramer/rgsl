@@ -38,9 +38,7 @@ The above command should print something similar to:
 
 In this package we consider the initial value problem:
 
-|            |          |   |
-|:----------:|:--------:|--:|
-|<span class="math display"><em>ẋ</em> = <em>f</em>(<em>x</em>, <em>t</em>; <em>p</em>)</span>|<span class="math display"><em>x</em>(<em>t</em><sub>0</sub>) = <em>x</em><sub>0</sub></span>|(1)|
+<span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>ẋ</em> = <em>f</em>(<em>x</em>, <em>t</em>; <em>p</em>)</span><span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>x</em>(<em>t</em><sub>0</sub>) = <em>x</em><sub>0</sub></span>
 
 where _p_ is a parameter vector. 
 
