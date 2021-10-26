@@ -7,7 +7,11 @@ module functions to solve the problem or problems.
 
 The parameter vector can be replaced by an _n×m_ matrix of several
 parameterisations (each column is a distinct parameter vector). The
-solver wil be called _m_ times. 
+solver will be called _m_ times. If the parameters _p_ are a matrix
+then so should be the initial value _y0_, with identical numbers of
+columns.
+
+OpenMP is used to make this set of simulations run in parallel.
 
 The result is returned to R as a 3-dimensional array.
 
@@ -21,9 +25,7 @@ Using the `remotes` package:
 remotes::install_github("a-kramer/rgsl")
 ```
 
-Ensure that the [GNU Scientific
-Library](https://www.gnu.org/software/gsl/doc/html/index.html) (gsl)
-is installed in your system and pkg-config can find it:
+Ensure that the [GNU Scientific Library](https://www.gnu.org/software/gsl/doc/html/index.html) (gsl) is installed in your system and pkg-config can find it:
 
 ```bash
 $ pkg-config --libs gsl
@@ -38,7 +40,7 @@ The above command should print something similar to:
 
 In this package we consider the initial value problem:
 
-<span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>ẋ</em> = <em>f</em>(<em>x</em>, <em>t</em>; <em>p</em>)</span><span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>x</em>(<em>t</em><sub>0</sub>) = <em>x</em><sub>0</sub></span>
+<span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>ẏ</em> = <em>f</em>(<em>y</em>, <em>t</em>; <em>p</em>)</span>,<span style="width=4em"/><span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>y</em>(<em>t</em><sub>0</sub>) = <em>y</em><sub>0</sub></span>
 
 where _p_ is a parameter vector. 
 
