@@ -27,7 +27,6 @@
 r_gsl_odeiv2 <- function(name,t,y0,p){
     so <- paste0(name,".so")
     stopifnot(file.exists(so))
-    #rgsl <- dyn.load("r_gsl_odeiv2.so")
-    y <- .Call(odeiv,name,t,y0,as.matrix(p))
+    y <- .Call(odeiv,name,t,as.matrix(y0),as.matrix(p))
     return(y)
 }

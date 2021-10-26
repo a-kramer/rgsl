@@ -195,17 +195,23 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){
      To compensate, we switch the roles here.
   */
   size_t nt=length(tspan);
-  size_t ny=length(y0);
+  size_t ny;
   size_t np,N;
   if (isMatrix(p)){
     np=nrows(p);
     N=ncols(p);
+    assert(isMatrix(y0));
+    ny=nrows(y0);
+    assert(ncols(y0)==N);
   } else if (isVector(p)) {
     np=length(p);
     N=1;
+    assert(isVector(y0));
+    ny=length(y0);
   }
+  printf("[%s] ny=%li, np=%li, N=%li.\n",__func__,ny,np,N);
   gsl_vector_view t=gsl_vector_view_array(REAL(tspan),nt);
-  gsl_vector_view initial_value = gsl_vector_view_array(REAL(y0),ny);
+  gsl_matrix_view initial_value = gsl_matrix_view_array(REAL(y0),N,ny);
   gsl_matrix_view ode_parameter = gsl_matrix_view_array(REAL(p),N,np);
   
   // load system from file and test it
@@ -219,23 +225,25 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){
   // most CPU work happens here:
   Rdata Y = PROTECT(alloc3DArray(REALSXP,ny,nt,N));
   double *ydata;
+  gsl_vector_view iv_row;
   size_t nyt=nt*ny;
   gsl_matrix_view y;
   int status;
   ydata = REAL(Y);
 
-#pragma omp parallel for private(driver,y) firstprivate(sys)
+#pragma omp parallel for private(driver,y,iv_row) firstprivate(sys,ydata,initial_value,t)
   for (i=0;i<N;i++){
     driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-    //printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+    printf("[%s] system dimension: %li\n",__func__,sys.dimension);
     fflush(stdout);
-    //printf("[%s] solving %i of %li.\n",__func__,i,N);
+    printf("[%s] solving %i of %li.\n",__func__,i,N);
     y=gsl_matrix_view_array(&(ydata[i*nyt]),nt,ny);
     sys.params = gsl_matrix_ptr(&(ode_parameter.matrix),i,0);
+    iv_row=gsl_matrix_row(&(initial_value.matrix),i);
     status=simulate_timeseries
       (sys,
        driver,
-       &(initial_value.vector),
+       &(iv_row.vector),
        &(t.vector),
        &(y.matrix));
     assert(status==GSL_SUCCESS);
