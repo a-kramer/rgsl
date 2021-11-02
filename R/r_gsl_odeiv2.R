@@ -24,9 +24,12 @@
 #' t <- seq(0,1,length.out=100)
 #' p <- c(1,0,0)
 #' y <- r_gsl_odeiv2("HarmonicOscillator",t,y0,p)
-r_gsl_odeiv2 <- function(name,t,y0,p){
+r_gsl_odeiv2 <- function(name,t,y0,p,M=NULL,K=NULL,t.event=NULL){
     so <- paste0(name,".so")
     stopifnot(file.exists(so))
-    y <- .Call(odeiv,name,t,as.matrix(y0),as.matrix(p))
+    y0 <- as.matrix(y0)
+    p <- as.matrix(p)
+    y <- .Call(odeiv,name,t,y0,p,M,K,t.event)
+    dimnames(y) <- list(rownames(y0),names(t),colnames(p))
     return(y)
 }

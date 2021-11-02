@@ -178,7 +178,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
    The possible command line options are documented in the [README.md](../README.md) .
 */
 Rdata /* `EXIT_SUCESS` if all files are found and integration succeeds, default `abort()` signal otherwise.*/
-r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){ 
+r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata M, Rdata K, Rdata t_event){ 
   int i=0;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   assert(IS_CHARACTER(model_name));
@@ -214,15 +214,33 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p){
   gsl_matrix_view initial_value = gsl_matrix_view_array(REAL(y0),N,ny);
   gsl_matrix_view ode_parameter = gsl_matrix_view_array(REAL(p),N,np);
   
-  // load system from file and test it
+  // load system from file
   jacp dfdp;
   gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), ny, REAL(p), &dfdp);
   printf("[%s] system dimension: %li\n",__func__,sys.dimension);
-  //test_evaluation(sys,dfdp,&(initial_value.vector),&(ode_parameter.vector));
+
+  // check whether events are happening during integration:
+  if (IS_NUMERIC(M) && IS_NUMERIC(K) && IS_NUMERIC(t_event)){
+
+    Rdata dM=GET_DIM(M);
+    assert(IS_NUMERIC(dM) && IS_INTEGER(dM));
+    int M_nd = length(dM);
+    printf("[%s] M has %i indices:\n",__func__,M_nd);
+    for (i=0;i<M_nd;i++) printf("\t%i",INTEGER(dM)[i]);
+    putchar('\n');
+
+    Rdata dK=GET_DIM(K);
+    assert(IS_NUMERIC(dK) && IS_INTEGER(dK));
+    int K_nd = length(dK);
+    printf("[%s] K has %i indices:\n",__func__,K_nd);
+    for (i=0;i<K_nd;i++) printf("\t%i",INTEGER(dK)[i]);
+    putchar('\n');
+    
+  }
 
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver;
-  // most CPU work happens here:
+
   Rdata Y = PROTECT(alloc3DArray(REALSXP,ny,nt,N));
   double *ydata;
   gsl_vector_view iv_row;
