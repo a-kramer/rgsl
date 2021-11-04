@@ -17,7 +17,8 @@
 #endif
 #define FREE_ON_SUCCESS 1
 #define KEEP_ON_SUCCESS 2
-
+#define MATCH 0
+#define NO_DIFFERENCE 0
 // SEXP stands for S-Expression, and it can be any R data object (or function)
 // in this program, we'll only use data from R
 // and SEXP is so weird to read, so...
@@ -162,6 +163,21 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   return status;
 }
 
+Rdata from_list(Rdata List, const char *name){
+  assert(isVector(List));
+  int i;
+  int N=length(List);
+  Rdata names = GET_NAMES(List);
+  Rdata E;
+  for (i=0;i<length(names);i++){
+    if (strcmp(CHAR(STRING_ELT(names,i)),name) == MATCH){
+      E = VECTOR_ELT(List,i);
+    }
+  }
+  return E;  
+}
+
+
 /* This prgram loads an ODE model, specified for the `gsl_odeiv2`
    library. The initial value problems are specified in an hdf5 file,
    intended for use in systems biology applications. So, some of the
@@ -178,8 +194,8 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
    The possible command line options are documented in the [README.md](../README.md) .
 */
 Rdata /* `EXIT_SUCESS` if all files are found and integration succeeds, default `abort()` signal otherwise.*/
-r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata M, Rdata K, Rdata t_event){ 
-  int i=0;
+r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata event){ 
+  int i,j;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   assert(IS_CHARACTER(model_name));
   assert(IS_NUMERIC(tspan));
@@ -220,23 +236,37 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata M, Rdata K,
   printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 
   // check whether events are happening during integration:
-  if (IS_NUMERIC(M) && IS_NUMERIC(K) && IS_NUMERIC(t_event)){
-
-    Rdata dM=GET_DIM(M);
-    assert(IS_NUMERIC(dM) && IS_INTEGER(dM));
-    int M_nd = length(dM);
-    printf("[%s] M has %i indices:\n",__func__,M_nd);
-    for (i=0;i<M_nd;i++) printf("\t%i",INTEGER(dM)[i]);
-    putchar('\n');
-
-    Rdata dK=GET_DIM(K);
-    assert(IS_NUMERIC(dK) && IS_INTEGER(dK));
-    int K_nd = length(dK);
-    printf("[%s] K has %i indices:\n",__func__,K_nd);
-    for (i=0;i<K_nd;i++) printf("\t%i",INTEGER(dK)[i]);
-    putchar('\n');
-    
+  int l,lt;
+  double *event_time;
+  Rdata E;
+  Rdata temp;
+  if (event != R_NilValue && event){
+    l=length(event);
+    printf("[%s] there are %i series of events, must be equal to N=%li.\n",__func__,l,N);
+    for (i=0;i<l;i++){
+      E = VECTOR_ELT(event, i);
+      temp = from_list(E,"time");
+      lt=length(temp);
+      event_time = REAL(temp);
+      printf("[%s] event times:",__func__);
+      for (j=0;j<lt;j++) printf("\t%g",event_time[j]);
+      putchar('\n');
+    }
   }
+    
+    /* Rdata dM=GET_DIM(M); */
+    /* assert(IS_NUMERIC(dM) && IS_INTEGER(dM)); */
+    /* int M_nd = length(dM); */
+    /* printf("[%s] M has %i indices:\n",__func__,M_nd); */
+    /* for (i=0;i<M_nd;i++) printf("\t%i",INTEGER(dM)[i]); */
+    /* putchar('\n'); */
+
+    /* Rdata dK=GET_DIM(K); */
+    /* assert(IS_NUMERIC(dK) && IS_INTEGER(dK)); */
+    /* int K_nd = length(dK); */
+    /* printf("[%s] K has %i indices:\n",__func__,K_nd); */
+    /* for (i=0;i<K_nd;i++) printf("\t%i",INTEGER(dK)[i]); */
+    /* putchar('\n'); */
 
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver;
@@ -252,8 +282,6 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata M, Rdata K,
 #pragma omp parallel for private(driver,y,iv_row) firstprivate(sys,ydata,initial_value,t)
   for (i=0;i<N;i++){
     driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-    printf("[%s] system dimension: %li\n",__func__,sys.dimension);
-    fflush(stdout);
     printf("[%s] solving %i of %li.\n",__func__,i,N);
     y=gsl_matrix_view_array(&(ydata[i*nyt]),nt,ny);
     sys.params = gsl_matrix_ptr(&(ode_parameter.matrix),i,0);
