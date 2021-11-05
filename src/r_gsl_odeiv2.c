@@ -25,14 +25,96 @@
 typedef SEXP Rdata;
 
 typedef int(*jacp)(double, const double [], double *, void *);
+typedef enum {DIAG,MATVEC} tf_t;
 
 typedef struct {
-  char *name;
+  tf_t type;
+  int length_b;
   double *A;
-  double *a;
-  double *B;
   double *b;
+} linear_tf;
+  
+typedef struct {
+  char *name;
+  int nt;
+  double *time;
+  linear_tf *state;
+  linear_tf *par;
 } event_t;
+
+Rdata from_list(Rdata List, const char *name){
+  assert(isVector(List));
+  int i;
+  int N=length(List);
+  Rdata names = GET_NAMES(List);
+  Rdata E;
+  for (i=0;i<length(names);i++){
+    if (strcmp(CHAR(STRING_ELT(names,i)),name) == MATCH){
+      E = VECTOR_ELT(List,i);
+    }
+  }
+  return E;  
+}
+
+/*creates a linear trannsformation struct from R objects, no memory is allocated, Rdata onjects need to be kept alive */
+linear_tf* /* a linear transformation with offset */
+linear_transformation(
+ Rdata A,/*a series of matrices, possibly just a set of diagonals*/
+ Rdata b)/*a series of offsets*/
+{
+  assert(IS_NUMERIC(A));
+  assert(IS_NUMERIC(b));
+  Rdata dA=GET_DIM(A);
+  Rdata db=GET_DIM(b);
+  int n=length(dA);
+  int l=length(db);
+  int *dim=INTEGER(d);
+  assert(dim[0] == INTEGER(db)[0]);
+  linear_tf *L=malloc(sizeof(linear_tf));
+  if (n==3 && dim[0]==dim[1]){
+    L->type=MATVEC;
+    assert(l==n-1);
+  } else if (n==2) {
+    L->type=DIAG;
+    assert(l==n);
+  }
+  L->A=REAL(A);
+  L->b=REAL(b);
+  L->length_b=dim[0];
+  return L;
+}
+
+int apply_tf(linear_tf *L, double *z){
+  assert(L);
+  assert(z);
+  int n=L->length_b;
+  gsl_vector_view v=gsl_vector_view_array(z,n);
+  if (L->type == MATVEC){
+
+  } else if (L->type == DIAG){
+
+  } else {
+    fprintf(stderr,"[%s] unknown transformation type %i.\n"__func__,L->type);
+    abort();
+  }
+}
+
+event_t* event_from_R(Rdata E){
+  int j;
+  event_t *event=malloc(sizeof(event_t));
+  
+  event->state=linear_transformation(from_list(E,"A"),from_list(E,"a"));
+  event->par=linear_transformation(from_list(E,"B"),from_list(E,"b"));
+  
+  Rdata time = from_list(E,"time");
+  lt=length(time);
+  event->time = REAL(time);
+  event->nt=lt;
+  printf("[%s] event times:",__func__);
+  for (j=0;j<lt;j++) printf("\t%g",event->time[j]);
+  putchar('\n');
+  return event;
+}
 
 /*This function allocates memory and concatenates two strings in that
   memory. It is used to make function names (this is for loading the model
@@ -122,6 +204,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
  gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
  const gsl_vector *y0, /* initial value */
  const gsl_vector *tspan, /* a vector of time-points */
+ const event_t *event, /*a struct array with scheduled events */
  gsl_matrix *Yout) /* time span vector: initial time, increment, final time */
 {
   assert(driver);
@@ -132,10 +215,12 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   gsl_vector_memcpy(y,y0);
   
   gsl_vector_view Yout_row;
+  int i=0;
   int j;
-  double t,tf,dt;
+  double t,tf,te;
   double dfdt[ny];
   int status;
+  gsl_vector_view
   /* initialize time-point 0 values */
   t=gsl_vector_get(tspan,0);
   Yout_row = gsl_matrix_row(Yout,0);
@@ -143,6 +228,13 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   
   for (j=1; j<nt; j++){
     tf=gsl_vector_get(tspan,j);
+    te=event->time[i];
+    if (te < tf){
+      status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
+      apply_linear_transformation(event->state,y->data);
+      apply_linear_transformation(event->par,(double*) sys.params);
+      status=gsl_drifver_reset(driver);
+    }
     //printf("[%s] t=%f -> %f\n",__func__,t,tf);
     status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
     //report any error codes to the R user
@@ -170,40 +262,27 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   return status;
 }
 
-Rdata from_list(Rdata List, const char *name){
-  assert(isVector(List));
-  int i;
-  int N=length(List);
-  Rdata names = GET_NAMES(List);
-  Rdata E;
-  for (i=0;i<length(names);i++){
-    if (strcmp(CHAR(STRING_ELT(names,i)),name) == MATCH){
-      E = VECTOR_ELT(List,i);
-    }
-  }
-  return E;  
-}
 
 
 
 
 /* This prgram loads an ODE model, specified for the `gsl_odeiv2`
-   library. The initial value problems are specified in an hdf5 file,
-   intended for use in systems biology applications. So, some of the
-   terminology in the expected hdf5 _data_ file is vaguely related to
-   biological systems. All command line arguments are optional and
-   names of files are guessed, based on the contents of the current
-   working directoy. The hdf5 fiel is expected to have a group called
-   "data", this group shall contain hdf5 DATASETS with ATTRIBUTES that
-   describe initial value problems suitable to replicate these
-   datasets: InitialValue, time, and index. Currenty, the model is
-   parameterized using the value of the DATASET *mu*, in the GROUP
-   called *prior*. 
-
-   The possible command line options are documented in the [README.md](../README.md) .
+   library. It simulates the model for each column of initial
+   conditions y0 and parameters p.
+```
+   y'=f(y,t;p)
+   y0=y(t[0])
+```
+   if y0 and p are matrices with m columns (both), then the model is
+   simulated m times, in parallel if possible.
 */
-Rdata /* `EXIT_SUCESS` if all files are found and integration succeeds, default `abort()` signal otherwise.*/
-r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata event){ 
+Rdata /* the trajectories as a three dimensional array */
+r_gsl_odeiv2(
+ Rdata model_name, /* a string */
+ Rdata tspan, /* a vector of output times with tspan[0] crresponding to y0 */
+ Rdata y0, /* initial conditions at tspan[0], can be a matrix*/
+ Rdata p, /* parameter matrix */
+ Rdata event){ 
   int i,j;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   assert(IS_CHARACTER(model_name));
@@ -253,44 +332,28 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata event){
   double *event_time;
   Rdata E;
   Rdata temp;
-  event_t ev;
+  event_t **ev=calloc(N,sizeof(event_t*));
   if (event != R_NilValue && event){
     l=length(event);
     assert(l==N || ExperimentsAreNamed);
     for (i=0;i<l;i++){
-      E = VECTOR_ELT(event, i);
-      temp = from_list(E,"time");
-      lt=length(temp);
-      ev.time = REAL(temp);
-      
-      temp = from_list(E,"A");
-      event.A = REAL(temp);
-      temp = from_list(E,"a");
-      event.a = REAL(temp);
-      temp = from_list(E,"B");
-      event.B = REAL(temp);
-      temp = from_list(E,"b");
-      event.b = REAL(temp);
-
-      printf("[%s] event times:",__func__);
-      for (j=0;j<lt;j++) printf("\t%g",event.time[j]);
-      putchar('\n');
+      ev[i] = event_from_R(VECTOR_ELT(event, i));
     }
   }
     
-    /* Rdata dM=GET_DIM(M); */
-    /* assert(IS_NUMERIC(dM) && IS_INTEGER(dM)); */
-    /* int M_nd = length(dM); */
-    /* printf("[%s] M has %i indices:\n",__func__,M_nd); */
-    /* for (i=0;i<M_nd;i++) printf("\t%i",INTEGER(dM)[i]); */
-    /* putchar('\n'); */
+  /* Rdata dM=GET_DIM(M); */
+  /* assert(IS_NUMERIC(dM) && IS_INTEGER(dM)); */
+  /* int M_nd = length(dM); */
+  /* printf("[%s] M has %i indices:\n",__func__,M_nd); */
+  /* for (i=0;i<M_nd;i++) printf("\t%i",INTEGER(dM)[i]); */
+  /* putchar('\n'); */
 
-    /* Rdata dK=GET_DIM(K); */
-    /* assert(IS_NUMERIC(dK) && IS_INTEGER(dK)); */
-    /* int K_nd = length(dK); */
-    /* printf("[%s] K has %i indices:\n",__func__,K_nd); */
-    /* for (i=0;i<K_nd;i++) printf("\t%i",INTEGER(dK)[i]); */
-    /* putchar('\n'); */
+  /* Rdata dK=GET_DIM(K); */
+  /* assert(IS_NUMERIC(dK) && IS_INTEGER(dK)); */
+  /* int K_nd = length(dK); */
+  /* printf("[%s] K has %i indices:\n",__func__,K_nd); */
+  /* for (i=0;i<K_nd;i++) printf("\t%i",INTEGER(dK)[i]); */
+  /* putchar('\n'); */
 
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver;
@@ -315,6 +378,7 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata event){
        driver,
        &(iv_row.vector),
        &(t.vector),
+       ev[i],
        &(y.matrix));
     assert(status==GSL_SUCCESS);
     gsl_odeiv2_driver_free(driver);
