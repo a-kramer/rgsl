@@ -26,6 +26,13 @@ typedef SEXP Rdata;
 
 typedef int(*jacp)(double, const double [], double *, void *);
 
+typedef struct {
+  char *name;
+  double *A;
+  double *a;
+  double *B;
+  double *b;
+} event_t;
 
 /*This function allocates memory and concatenates two strings in that
   memory. It is used to make function names (this is for loading the model
@@ -178,6 +185,8 @@ Rdata from_list(Rdata List, const char *name){
 }
 
 
+
+
 /* This prgram loads an ODE model, specified for the `gsl_odeiv2`
    library. The initial value problems are specified in an hdf5 file,
    intended for use in systems biology applications. So, some of the
@@ -213,12 +222,16 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata event){
   size_t nt=length(tspan);
   size_t ny;
   size_t np,N;
+  Rdata experiment_names;
+  int ExperimentsAreNamed = 0;
   if (isMatrix(p)){
     np=nrows(p);
     N=ncols(p);
     assert(isMatrix(y0));
     ny=nrows(y0);
     assert(ncols(y0)==N);
+    experiment_names = GET_COLNAMES(p);
+    if (experiment_names != R_NilValue) ExperimentsAreNamed = 1;
   } else if (isVector(p)) {
     np=length(p);
     N=1;
@@ -240,16 +253,27 @@ r_gsl_odeiv2(Rdata model_name, Rdata tspan, Rdata y0, Rdata p, Rdata event){
   double *event_time;
   Rdata E;
   Rdata temp;
+  event_t ev;
   if (event != R_NilValue && event){
     l=length(event);
-    printf("[%s] there are %i series of events, must be equal to N=%li.\n",__func__,l,N);
+    assert(l==N || ExperimentsAreNamed);
     for (i=0;i<l;i++){
       E = VECTOR_ELT(event, i);
       temp = from_list(E,"time");
       lt=length(temp);
-      event_time = REAL(temp);
+      ev.time = REAL(temp);
+      
+      temp = from_list(E,"A");
+      event.A = REAL(temp);
+      temp = from_list(E,"a");
+      event.a = REAL(temp);
+      temp = from_list(E,"B");
+      event.B = REAL(temp);
+      temp = from_list(E,"b");
+      event.b = REAL(temp);
+
       printf("[%s] event times:",__func__);
-      for (j=0;j<lt;j++) printf("\t%g",event_time[j]);
+      for (j=0;j<lt;j++) printf("\t%g",event.time[j]);
       putchar('\n');
     }
   }
