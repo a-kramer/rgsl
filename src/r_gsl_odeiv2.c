@@ -32,14 +32,15 @@ typedef struct {
   int length_b;
   double *A;
   double *b;
-} linear_tf;
+  gsl_vector *y; /* result vector */
+} affine_tf;
   
 typedef struct {
   char *name;
   int nt;
   double *time;
-  linear_tf *state;
-  linear_tf *par;
+  affine_tf *state;
+  affine_tf *par;
 } event_t;
 
 Rdata from_list(Rdata List, const char *name){
@@ -56,9 +57,11 @@ Rdata from_list(Rdata List, const char *name){
   return E;  
 }
 
-/*creates a linear trannsformation struct from R objects, no memory is allocated, Rdata onjects need to be kept alive */
-linear_tf* /* a linear transformation with offset */
-linear_transformation(
+/* creates an affine transformation struct from R objects, Rdata
+   objects need to be kept alive as A and b arfe taken from R via
+   pointers. Some memory is allocated to store an intermediate result. */
+affine_tf* /* an affine transformation (linear with offset) map: x -> A*x+b */
+affine_transformation(
  Rdata A,/*a series of matrices, possibly just a set of diagonals*/
  Rdata b)/*a series of offsets*/
 {
@@ -68,9 +71,9 @@ linear_transformation(
   Rdata db=GET_DIM(b);
   int n=length(dA);
   int l=length(db);
-  int *dim=INTEGER(d);
+  int *dim=INTEGER(dA);
   assert(dim[0] == INTEGER(db)[0]);
-  linear_tf *L=malloc(sizeof(linear_tf));
+  affine_tf *L=malloc(sizeof(affine_tf));
   if (n==3 && dim[0]==dim[1]){
     L->type=MATVEC;
     assert(l==n-1);
@@ -81,33 +84,52 @@ linear_transformation(
   L->A=REAL(A);
   L->b=REAL(b);
   L->length_b=dim[0];
+  L->y=gsl_vector_alloc(dim[0]);
   return L;
 }
 
-int apply_tf(linear_tf *L, double *z){
+/* This function applies a affine transformation to the vector z. We
+   assume that A and b and z in the input are all of sufficient size:
+   n×n for matrices and n for vectors. A can be n-sized as well, if A
+   is a diagonal matrix, then we only store the diagonal. n is stored
+   in the transformation structure as length_b.  */
+int /* the returned status of the gsl operations */
+apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vectors here*/
+	 double *z)/* an array of size n, it is updated using L */{
   assert(L);
   assert(z);
   int n=L->length_b;
-  gsl_vector_view v=gsl_vector_view_array(z,n);
+  int status=GSL_SUCCESS;
+  gsl_vector_view x=gsl_vector_view_array(z,n);
+  gsl_vector_view b=gsl_vector_view_array(L->b,n);
   if (L->type == MATVEC){
-
+    /* y <- A*x + b */
+    gsl_matrix_view A=gsl_matrix_view_array(L->A,n,n);
+    status|=gsl_blas_dgemv(CblasNoTrans, 1.0, &(A.matrix), &(x.vector), 0.0, L->y);
   } else if (L->type == DIAG){
-
+    /* y <- diag(A)*x + b */
+    gsl_vector_view a=gsl_vector_view_array(L->A,n);
+    status|=gsl_vector_memcpy(L->y,&(x.vector));
+    status|=gsl_vector_mul(L->y,&(a.vector));
   } else {
-    fprintf(stderr,"[%s] unknown transformation type %i.\n"__func__,L->type);
+    fprintf(stderr,"[%s] unknown transformation type %i.\n",__func__,L->type);
     abort();
   }
+  assert(status==GSL_SUCCESS);
+  gsl_vector_add(L->y,&(b.vector));
+  gsl_vector_memcpy(&(x.vector),L->y);
+  return status;
 }
 
 event_t* event_from_R(Rdata E){
   int j;
   event_t *event=malloc(sizeof(event_t));
   
-  event->state=linear_transformation(from_list(E,"A"),from_list(E,"a"));
-  event->par=linear_transformation(from_list(E,"B"),from_list(E,"b"));
+  event->state=affine_transformation(from_list(E,"A"),from_list(E,"a"));
+  event->par=affine_transformation(from_list(E,"B"),from_list(E,"b"));
   
   Rdata time = from_list(E,"time");
-  lt=length(time);
+  int lt=length(time);
   event->time = REAL(time);
   event->nt=lt;
   printf("[%s] event times:",__func__);
@@ -220,20 +242,23 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   double t,tf,te;
   double dfdt[ny];
   int status;
-  gsl_vector_view
   /* initialize time-point 0 values */
   t=gsl_vector_get(tspan,0);
   Yout_row = gsl_matrix_row(Yout,0);
   gsl_vector_memcpy(&(Yout_row.vector),y0);
   
-  for (j=1; j<nt; j++){
+  for (j=1, i=0; j<nt; j++){
     tf=gsl_vector_get(tspan,j);
-    te=event->time[i];
-    if (te < tf){
+    if (i<event->nt && event->time[i] < tf) {
+      te=event->time[i];
+      printf("[%s] a scheduled event occurs at t=%g.\n",__func__,te);
       status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
-      apply_linear_transformation(event->state,y->data);
-      apply_linear_transformation(event->par,(double*) sys.params);
-      status=gsl_drifver_reset(driver);
+      assert(status==GSL_SUCCESS);
+      apply_tf(event->state,y->data);
+      apply_tf(event->par,(double*) sys.params);
+      status=gsl_odeiv2_driver_reset(driver);
+      assert(status==GSL_SUCCESS);
+      i++;
     }
     //printf("[%s] t=%f -> %f\n",__func__,t,tf);
     status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);

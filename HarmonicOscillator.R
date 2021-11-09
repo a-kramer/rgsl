@@ -7,23 +7,27 @@ demo<-function(){
         system2("gcc",sprintf("%s -o %s %s_gvf.c %s",CFLAGS,so,name,LIBS))
     }
     t <- seq(0,13,length.out=120)
-    N <- 10
+    N <- 6
     ny <- 2
     np <- 3
     y0 <- matrix(c(0,1),nrow=ny,ncol=N)
-    p <- matrix(c(1,0,0.1),nrow=np,ncol=N)
+    p <- matrix(c(1,0,0),nrow=np,ncol=N)
     for (i in 1:N) {
         p[2,i]=(i-1)/N
     }
     ## events:
+    t.event <- c(1.0,2.0,3.0)
+    lt <- length(t.event)
+    ## the state is reset to initial
+    M <- array(0,dim=c(ny,ny,lt))
+    ## friction is increased
+    I3 <- diag(1,3,3)
+    K <- array(c(I3,I3,I3),dim=c(np,np,lt))
+    print(dim(M))
+    ev <- list(time=t.event,A=M,B=K,a=y0,b=c(0,0.1,0))
+
     all.events=list()
     for (i in 1:N){
-        t.event <- c(1,2,3)
-        lt <- length(t.event)
-        M <- array(c(diag(2),diag(2),diag(2)),dim=c(ny,ny,lt))
-        K <- array(c(diag(3),diag(3),diag(3)),dim=c(np,np,lt))
-        print(dim(M))
-        ev <- list(time=t.event,A=M,B=K,a=y0,b=p)
         all.events[[i]]  <- ev
     }
 
