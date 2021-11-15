@@ -18,16 +18,20 @@ demo<-function(){
     ## events:
     t.event <- c(1.0,2.0,3.0)
     lt <- length(t.event)
-    ## the state is reset to initial
-    M <- array(0,dim=c(ny,ny,lt))
-    ## friction is increased
+    ## 2-dim and 3-dim identity matrix
     I3 <- diag(1,3,3)
-    K <- array(c(I3,I3,I3),dim=c(np,np,lt))
+    I2 <- diag(1,2,2)
+    ## the state is reset to initial
+    M <- array(I2,dim=c(ny,ny,lt))
+    K <- array(I3,dim=c(np,np,lt))
     print(dim(M))
-    ev <- list(time=t.event,A=M,B=K,a=y0,b=c(0,0.1,0))
-
+    ## y[i] <- v[i]*y[i] + a[i]
+    ## p <- B %*% p + b
     all.events=list()
     for (i in 1:N){
+        a <- array(c(1,0),dim=c(ny,1,lt));
+        b <- array(c(0,i*0.1,0),dim=c(np,1,lt));
+        ev <- list(time=t.event,A=M,B=K,a=a,b=b)
         all.events[[i]]  <- ev
     }
 

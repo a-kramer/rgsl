@@ -25,11 +25,12 @@
 typedef SEXP Rdata;
 
 typedef int(*jacp)(double, const double [], double *, void *);
-typedef enum {DIAG,MATVEC} tf_t;
+typedef enum {SCALE,DIAG,MATVEC} tf_t;
 
 typedef struct {
   tf_t type;
   int length_b;
+  int l;
   double *A;
   double *b;
   gsl_vector *y; /* result vector */
@@ -69,17 +70,30 @@ affine_transformation(
   assert(IS_NUMERIC(b));
   Rdata dA=GET_DIM(A);
   Rdata db=GET_DIM(b);
+  assert(length(dA)==length(db));
   int n=length(dA);
-  int l=length(db);
   int *dim=INTEGER(dA);
-  assert(dim[0] == INTEGER(db)[0]);
+  int *dim_b=INTEGER(db);
+  int j;
+  assert(dim[0] == dim_b[0]);
   affine_tf *L=malloc(sizeof(affine_tf));
-  if (n==3 && dim[0]==dim[1]){
+  if (n==3) {
+    L->l=dim[2];
+  } else {
+    L->l=1;
+  }
+	      
+  if (dim[0]==dim[1]){
     L->type=MATVEC;
-    assert(l==n-1);
-  } else if (n==2) {
+  } else if (dim[1] == 1) {
     L->type=DIAG;
-    assert(l==n);
+  } else {
+    printf("[%s] A and b have weird dimensionality: A is ",__func__);
+    for (j=0;j<n;j++) printf("%i%s",dim[j],j==n-1?"×":" ");
+    printf(" and b is ");
+    for (j=0;j<n;j++) printf("%i%s",dim_b[j],j==n-1?"×":" ");
+    printf("\nThey should be both three dimensional.\n");
+    abort();
   }
   L->A=REAL(A);
   L->b=REAL(b);
@@ -95,25 +109,38 @@ affine_transformation(
    in the transformation structure as length_b.  */
 int /* the returned status of the gsl operations */
 apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vectors here*/
-	 double *z)/* an array of size n, it is updated using L */{
+	 double *z,/* an array of size n, it is updated using L */
+	 int t_index)/* if A and b are each a series of matrices, pick the i-th */
+{
   assert(L);
   assert(z);
+  assert(t_index >=0 && L->l > 0);
   int n=L->length_b;
+  int i=t_index % (L->l);
   int status=GSL_SUCCESS;
   gsl_vector_view x=gsl_vector_view_array(z,n);
-  gsl_vector_view b=gsl_vector_view_array(L->b,n);
-  if (L->type == MATVEC){
-    /* y <- A*x + b */
-    gsl_matrix_view A=gsl_matrix_view_array(L->A,n,n);
-    status|=gsl_blas_dgemv(CblasNoTrans, 1.0, &(A.matrix), &(x.vector), 0.0, L->y);
-  } else if (L->type == DIAG){
+  gsl_vector_view b=gsl_vector_view_array((L->b)+i*n,n);
+  gsl_vector_view a;
+  gsl_matrix_view A;
+  switch (L->type){
+  case SCALE:
+    status|=gsl_vector_memcpy(L->y,&(x.vector));
+    status|=gsl_vector_scale(L->y,L->A[i]);
+    break;
+  case DIAG:
     /* y <- diag(A)*x + b */
-    gsl_vector_view a=gsl_vector_view_array(L->A,n);
+    a=gsl_vector_view_array((L->A)+i*n,n);
     status|=gsl_vector_memcpy(L->y,&(x.vector));
     status|=gsl_vector_mul(L->y,&(a.vector));
-  } else {
+    break;    
+  case MATVEC: 
+    /* y <- A*x + b */
+    A=gsl_matrix_view_array((L->A)+i*n*n,n,n);
+    status|=gsl_blas_dgemv(CblasNoTrans, 1.0, &(A.matrix), &(x.vector), 0.0, L->y);
+    break;
+  default:
     fprintf(stderr,"[%s] unknown transformation type %i.\n",__func__,L->type);
-    abort();
+    abort();    
   }
   assert(status==GSL_SUCCESS);
   gsl_vector_add(L->y,&(b.vector));
@@ -252,10 +279,10 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
     if (i<event->nt && event->time[i] < tf) {
       te=event->time[i];
       printf("[%s] a scheduled event occurs at t=%g.\n",__func__,te);
-      status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
+      status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
       assert(status==GSL_SUCCESS);
-      apply_tf(event->state,y->data);
-      apply_tf(event->par,(double*) sys.params);
+      apply_tf(event->state,y->data,i);
+      apply_tf(event->par,(double*) sys.params,i);
       status=gsl_odeiv2_driver_reset(driver);
       assert(status==GSL_SUCCESS);
       i++;
@@ -264,20 +291,20 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
     status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
     //report any error codes to the R user
     switch (status){
-    case GSL_EMAXITER:
+    case GSL_EMAXITER :
       error("[%s] time_point %li: maximum number of steps reached.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
       break;
-    case GSL_ENOPROG:
+    case GSL_ENOPROG :
       error("[%s] time_point %li: step size dropeed below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
       break;
-    case GSL_EBADFUNC:
+    case GSL_EBADFUNC :
       error("[%s] time_point %li: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
       break;
-    case GSL_SUCCESS:
+    case GSL_SUCCESS :
       Yout_row = gsl_matrix_row(Yout,j);
       gsl_vector_memcpy(&(Yout_row.vector),y);
       break;
-    default:
+    default :
       error("[%s] unhandled error code: %#x\n",__func__,status);
       abort();
     }
