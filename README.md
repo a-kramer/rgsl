@@ -1,4 +1,4 @@
-# rgsl
+# rgsl - an interface between R and gsl_odeiv2
 
 This R package solves a series of initial value problems given as an
 ordinary differential equation, an initial state and a numerical
@@ -16,6 +16,9 @@ OpenMP is used to make this set of simulations run in parallel.
 The result is returned to R as a 3-dimensional array.
 
 This project was [funded by the EU](./ACKNOWLEDGMENTS.md) as part of the [Human Brain Project](https://www.humanbrainproject.eu/en/) and supported by [EBRAINS](https://ebrains.eu/) infrastructure.
+
+The 2 in `odeiv2` is from the GSL, there is no older R package of this
+name.
 
 ## Install
 
@@ -35,6 +38,71 @@ The above command should print something similar to:
 ```
 -lgsl -lgslcblas -lm
 ```
+
+## Usage
+
+The simplest call is:
+```R
+y<-r_gsl_odeiv2("NameOfModel",t,y0,p)
+```
+
+where `NameOfModel` indicates a file `NameOfModel.so` in the current
+directory, `t` is the vector of output time-points, with `t[1]`
+corresponding to `y0` (the initial conditions). The parameters `p`
+must be numeric (not arbitrary content).
+
+Both `y0` and `p` can be matrices, if they are more than one
+simulation is performed.
+
+The simulations can be more intricate if the event system is used, see
+below.
+
+### Events
+
+Often, a simulation requires an instantaneous intervention at a known
+point in time. For this purpose, a list of scheduled events can be fed
+into the solver. This does not cover all needs and use cases, but this
+concept can be used to mimic some experimental setups without calling
+the R functions multiple times.
+
+Each simulation can receive an event of this kind:
+```R
+te <- 3
+event[[i]] <- list(time=te,A,a,B,b)
+```
+where at time `te` both the state and the parameters will be transformed, like this:
+```R
+y <- A %*% y + a
+p <- B %*% p + b
+```
+but in C.
+
+If `time` is a vector, then all transformation quantities can be 3
+dimensional arrays, where the third dimension corresponds to time:
+
+```R
+# at time te[j], the transformation is
+y <- A[,,j] %*% y + a[,1,j]
+p <- B[,,j] %*% p + b[,1,j]
+```
+(the second dimension of `a` and `b` remains unused).
+
+If all `A` and `B` are diagonal, then the second dimension of these
+matrices can be 1 and understood as a list of diagonals:
+```R
+# if A and B are diagonals, then for all time[j]
+y <- A[,1,j] * y + a[,1,j]
+p <- B[,1,j] * p + b[,1,j]
+```
+but in C (again).
+
+This event system is less powerful than a triggered event system,
+where an instantaneous event occurs when a condition is met.
+
+The same effect could be achieved by calling `r_gsl_odeiv2` and
+integrating up to the event time, perform the transformation in R and
+then continue the integration from the transformed state using a
+second call to `r_gsl_odeiv2`.
 
 ## Purpose
 
@@ -175,5 +243,3 @@ writing/drafting biological models. The workflow could be:
             +-------------------+                 +----------------+
 
 ```
-
-
