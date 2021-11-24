@@ -37,23 +37,31 @@ typedef struct {
 } affine_tf;
   
 typedef struct {
-  char *name;
   int nt;
   double *time;
   affine_tf *state;
   affine_tf *par;
 } event_t;
 
-Rdata from_list(Rdata List, const char *name){
+int in_list(Rdata names, const char *name){
   assert(isVector(List));
   int i;
-  int N=length(List);
-  Rdata names = GET_NAMES(List);
-  Rdata E;
-  for (i=0;i<length(names);i++){
+  int N=length(names);
+  for (i=0;i<N;i++){
     if (strcmp(CHAR(STRING_ELT(names,i)),name) == MATCH){
-      E = VECTOR_ELT(List,i);
+      return i;
     }
+  }
+  return -1;  
+}
+
+Rdata from_list(Rdata List, const char *name){
+  assert(isVector(List));
+  Rdata names = GET_NAMES(List);
+  int i=in_list(names,name);
+  Rdata E=R_NilValue;
+  if (i>=0){
+    E=VECTOR_ELT(List,i);
   }
   return E;  
 }
@@ -147,6 +155,7 @@ apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vecto
   gsl_vector_memcpy(&(x.vector),L->y);
   return status;
 }
+
 
 event_t* event_from_R(Rdata E){
   int j;
@@ -242,6 +251,27 @@ load_system(const char *model_name, /* the file-name will be constructed from th
   return sys;
 }
 
+/*This function responds to the status returned by the gsl solvers.*/
+void check_status(int status, /*the returned value from gsl_odeiv2_driver_apply and similar functions*/
+		  double current_t, /* the time at which integration stopped*/
+		  double target_t, /* the time we tried to reach*/
+		  int iteration)/* the iteration at which the error happened */
+{
+  int j=iteration;
+  double t=current_t;
+  double tf=target_t;
+  switch (status){
+  case GSL_EMAXITER:
+    error("[%s] time_point %li: maximum number of steps reached.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+    break;
+  case GSL_ENOPROG:
+    error("[%s] time_point %li: step size dropeed below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+    break;
+  case GSL_EBADFUNC:
+    error("[%s] time_point %li: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+    break;
+  }
+}
 
 
 /* Intergrates the system `sys` using the specified `driver` and
@@ -283,40 +313,24 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
       assert(status==GSL_SUCCESS);
       apply_tf(event->state,y->data,i);
       apply_tf(event->par,(double*) sys.params,i);
-      status=gsl_odeiv2_driver_reset(driver);
+      status|=gsl_odeiv2_driver_reset(driver);
       assert(status==GSL_SUCCESS);
       i++;
     }
     //printf("[%s] t=%f -> %f\n",__func__,t,tf);
     status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
     //report any error codes to the R user
-    switch (status){
-    case GSL_EMAXITER :
-      error("[%s] time_point %li: maximum number of steps reached.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
-      break;
-    case GSL_ENOPROG :
-      error("[%s] time_point %li: step size dropeed below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
-      break;
-    case GSL_EBADFUNC :
-      error("[%s] time_point %li: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
-      break;
-    case GSL_SUCCESS :
+    check_status(status,t,tf,j);
+    if(status==GSL_SUCCESS){
       Yout_row = gsl_matrix_row(Yout,j);
       gsl_vector_memcpy(&(Yout_row.vector),y);
+    } else {
       break;
-    default :
-      error("[%s] unhandled error code: %#x\n",__func__,status);
-      abort();
     }
-    if (status!=GSL_SUCCESS) break;
   }
   gsl_odeiv2_driver_reset(driver);
   return status;
 }
-
-
-
-
 
 /* This prgram loads an ODE model, specified for the `gsl_odeiv2`
    library. It simulates the model for each column of initial
@@ -382,14 +396,23 @@ r_gsl_odeiv2(
   // check whether events are happening during integration:
   int l,lt;
   double *event_time;
+  Rdata event_names;
   Rdata E;
   Rdata temp;
   event_t **ev=calloc(N,sizeof(event_t*));
   if (event != R_NilValue && event){
     l=length(event);
-    assert(l==N || ExperimentsAreNamed);
-    for (i=0;i<l;i++){
-      ev[i] = event_from_R(VECTOR_ELT(event, i));
+    if (ExperimentsAreNamed){
+      event_names=GET_NAMES(event);
+      for (i=0;i<l;i++){
+	j=in_list(experiment_names,CHAR(VECTOR_ELT(event_names,i)));
+	ev[j] = event_from_R(VECTOR_ELT(event, i));
+      }
+    } else {
+      assert(l==N);
+      for (i=0;i<l;i++){
+	ev[i] = event_from_R(VECTOR_ELT(event, i));
+      }
     }
   }
     

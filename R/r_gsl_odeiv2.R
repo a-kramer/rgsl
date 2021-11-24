@@ -27,8 +27,19 @@
 r_gsl_odeiv2 <- function(name,t,y0,p,events){
     so <- paste0(name,".so")
     stopifnot(file.exists(so))
-    y0 <- as.matrix(y0)
-    p <- as.matrix(p)
+    if ("time" %in% names(events)) {
+        stopifnot(is.vector(p))
+        events=list(events)
+    }
+    if (is.vector(y0)){
+        dim(y0)<-c(length(y0),1)
+    }
+    if (is.vector(p)) {
+        dim(p)<-c(length(p),1)
+    }
+    if (is.character(colnames(p)) && is.character(names(events))) {
+        stopifnot(all(names(events) %in% colnames(p)))
+    }
     y <- .Call(odeiv,name,t,y0,p,events)
     dimnames(y) <- list(rownames(y0),names(t),colnames(p))
     return(y)

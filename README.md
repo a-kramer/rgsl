@@ -75,7 +75,10 @@ where at time `te` both the state and the parameters will be transformed, like t
 y <- A %*% y + a
 p <- B %*% p + b
 ```
-but in C.
+but in C. Events can also be named, with names corresponding to the
+column-names of `p`. In this case experiments with no events don't
+require a blank entry in the events list. The events list contains
+only meaningful (non-empty) events and they are accessed by name.
 
 If `time` is a vector, then all transformation quantities can be 3
 dimensional arrays, where the third dimension corresponds to time:
@@ -95,6 +98,9 @@ y <- A[,1,j] * y + a[,1,j]
 p <- B[,1,j] * p + b[,1,j]
 ```
 but in C (again).
+
+If `p` is a vector, then the list of events is _allowed_ to be just
+one event, _not_ within a _one element list_ (but that is also ok).
 
 This event system is less powerful than a triggered event system,
 where an instantaneous event occurs when a condition is met.
