@@ -22,22 +22,25 @@ int HarmonicOscillator_vf(double t, const double y_[], double f_[], void *params
     double k, c, F;
     double v_flux;
     double *p_;
+    int RET=GSL_SUCCESS;
+    if (y_ && f_){
+      p_ = (double *) params;
 
-    p_ = (double *) params;
+      v          = y_[0];
+      y          = y_[1];
 
-    v          = y_[0];
-    y          = y_[1];
+      k          = p_[0];
+      c          = p_[1];
+      F          = p_[2];
 
-    k          = p_[0];
-    c          = p_[1];
-    F          = p_[2];
+      v_flux = -k*y+F-v*c;
 
-    v_flux = -k*y+F-v*c;
-
-    f_[0] = v_flux;
-    f_[1] = v;
-
-    return GSL_SUCCESS;
+      f_[0] = v_flux;
+      f_[1] = v;
+    } else {
+      RET=2;
+    }
+    return RET;
 }
 
 /*
@@ -49,28 +52,32 @@ int HarmonicOscillator_jac(double t, const double y_[], double *jac_, double *df
     double v, y;
     double k, c, F;
     double *p_;
+    int RET=GSL_SUCCESS;
+    
+    if (y_ && jac_ && dfdt_ && p){
+      p_ = (double *) params;
 
-    p_ = (double *) params;
+      v          = y_[0];
+      y          = y_[1];
 
-    v          = y_[0];
-    y          = y_[1];
+      k          = p_[0];
+      c          = p_[1];
+      F          = p_[2];
 
-    k          = p_[0];
-    c          = p_[1];
-    F          = p_[2];
+      gsl_matrix_view dfdy_mat = gsl_matrix_view_array(jac_,2,2);
+      gsl_matrix *m_ = &dfdy_mat.matrix;
 
-    gsl_matrix_view dfdy_mat = gsl_matrix_view_array(jac_,2,2);
-    gsl_matrix *m_ = &dfdy_mat.matrix;
+      gsl_matrix_set(m_, 0, 0, -c);
+      gsl_matrix_set(m_, 0, 1, -k);
+      gsl_matrix_set(m_, 1, 0, 1.0);
+      gsl_matrix_set(m_, 1, 1, 0.0);
 
-    gsl_matrix_set(m_, 0, 0, -c);
-    gsl_matrix_set(m_, 0, 1, -k);
-    gsl_matrix_set(m_, 1, 0, 1.0);
-    gsl_matrix_set(m_, 1, 1, 0.0);
-
-    dfdt_[0] = 0.0;
-    dfdt_[1] = 0.0;
-
-    return GSL_SUCCESS;
+      dfdt_[0] = 0.0;
+      dfdt_[1] = 0.0;
+    } else {
+      RET=2*2;
+    }
+    return RET;
 }
 
 /*
@@ -82,51 +89,56 @@ int HarmonicOscillator_jacp(double t, const double y_[], double *jacp_, void *pa
     double v, y;
     double k, c, F;
     double *p_;
+    int RET=GSL_SUCCESS;
+    if (y_ && jacp_){
+      p_ = (double *) params;
 
-    p_ = (double *) params;
+      v          = y_[0];
+      y          = y_[1];
 
-    v          = y_[0];
-    y          = y_[1];
+      k          = p_[0];
+      c          = p_[1];
+      F          = p_[2];
 
-    k          = p_[0];
-    c          = p_[1];
-    F          = p_[2];
+      gsl_matrix_view dfdp_mat = gsl_matrix_view_array(jacp_,2,3);
+      gsl_matrix *m_ = &dfdp_mat.matrix;
 
-    gsl_matrix_view dfdp_mat = gsl_matrix_view_array(jacp_,2,3);
-    gsl_matrix *m_ = &dfdp_mat.matrix;
-
-    gsl_matrix_set(m_, 0, 0, -y);
-    gsl_matrix_set(m_, 0, 1, -v);
-    gsl_matrix_set(m_, 0, 2, 1.0);
-    gsl_matrix_set(m_, 1, 0, 0.0);
-    gsl_matrix_set(m_, 1, 1, 0.0);
-    gsl_matrix_set(m_, 1, 2, 0.0);
-
+      gsl_matrix_set(m_, 0, 0, -y);
+      gsl_matrix_set(m_, 0, 1, -v);
+      gsl_matrix_set(m_, 0, 2, 1.0);
+      gsl_matrix_set(m_, 1, 0, 0.0);
+      gsl_matrix_set(m_, 1, 1, 0.0);
+      gsl_matrix_set(m_, 1, 2, 0.0);
+    } else {
+      RET=2*3;
+    }
     return GSL_SUCCESS;
 }
 
 /*
  *  User function: flux
  */
-int HarmonicOscillator_flux(double t, const double y_[], double *f, void *params)
+int HarmonicOscillator_func(double t, const double y_[], double *f, void *params)
 {
     double v, y;
     double k, c, F;
     double v_flux;
     double *p_;
-    int R=1;
+    int RET=GSL_SUCCESS;
     if (f){
-     p_ = (double *) params;
+      p_ = (double *) params;
 
-     v          = y_[0];
-     y          = y_[1];
+      v          = y_[0];
+      y          = y_[1];
 
-     k          = p_[0];
-     c          = p_[1];
-     F          = p_[2];
+      k          = p_[0];
+      c          = p_[1];
+      F          = p_[2];
 
-     v_flux = -k*y+F-v*c;
-     f[0] = pow( (v*v)+(v_flux*v_flux),(1.0/2.0));
-    } 
-    return R;
+      v_flux = -k*y+F-v*c;
+      f[0] = pow( (v*v)+(v_flux*v_flux),(1.0/2.0));
+    } else {
+      RET=1;
+    }
+    return RET;
 }
