@@ -332,8 +332,8 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
   return status;
 }
 
-/* This prgram loads an ODE model, specified for the `gsl_odeiv2`
-   library. It simulates the model for each column of initial
+/* This prgram loads an ODE model, as needed for `gsl_odeiv2`.
+   It simulates the model for each column of initial
    conditions y0 and parameters p.
 ```
    y'=f(y,t;p)
@@ -348,7 +348,8 @@ r_gsl_odeiv2(
  Rdata tspan, /* a vector of output times with tspan[0] crresponding to y0 */
  Rdata y0, /* initial conditions at tspan[0], can be a matrix*/
  Rdata p, /* parameter matrix */
- Rdata event){ 
+ Rdata event) /* list of events */
+{ 
   int i,j;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   assert(IS_CHARACTER(model_name));
@@ -446,6 +447,58 @@ r_gsl_odeiv2(
     driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
     printf("[%s] solving %i of %li.\n",__func__,i,N);
     y=gsl_matrix_view_array(&(ydata[i*nyt]),nt,ny);
+    sys.params = gsl_matrix_ptr(&(ode_parameter.matrix),i,0);
+    iv_row=gsl_matrix_row(&(initial_value.matrix),i);
+    status=simulate_timeseries
+      (sys,
+       driver,
+       &(iv_row.vector),
+       &(t.vector),
+       ev[i],
+       &(y.matrix));
+    assert(status==GSL_SUCCESS);
+    gsl_odeiv2_driver_free(driver);
+  }
+  UNPROTECT(1);
+  return Y;
+}
+
+/* This prgram loads an ODE model, specified for `gsl_odeiv2`.  It
+   simulates the model for each entry in a list of named items, each
+   describing a single initial value problem  (y0, t, parameters p, events). 
+   ``` 
+   y'=f(y,t;p) y0=y(t[0]) 
+   ``` 
+*/
+Rdata /* the trajectories as a list (same size as experiments) */
+r_gsl_odeiv2_simulate(
+ Rdata model_name, /* a string */
+ Rdata experiments) /* a list of simulation experiments */
+{ 
+  int i,j;
+  double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+  assert(IS_CHARACTER(model_name));
+  assert(IS_LIST(experiments));
+  int N=GET_LENGTH(experiments);
+  
+  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+  gsl_odeiv2_driver *driver;
+  Rdata y_list = allocList(N); /* use VECTOR_ELT and SET_VECTOR_ELT */
+  Rdata Y;
+  double *ydata;
+  gsl_vector_view iv_row;
+  size_t nyt=nt*ny;
+  gsl_matrix_view y;
+  int status;
+  ydata = REAL(Y);
+
+#pragma omp parallel for private(driver,y,Y) firstprivate(sys,ydata,initial_value,t)
+  for (i=0;i<N;i++){
+    driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+    printf("[%s] solving %i of %li.\n",__func__,i,N);
+    Y=PROTECT(allocMatrix(ny,nt));
+    ydata=REAL(Y);
+    y=gsl_matrix_view_array(ydata,nt,ny);
     sys.params = gsl_matrix_ptr(&(ode_parameter.matrix),i,0);
     iv_row=gsl_matrix_row(&(initial_value.matrix),i);
     status=simulate_timeseries

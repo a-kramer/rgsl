@@ -108,24 +108,25 @@ int HarmonicOscillator_jacp(double t, const double y_[], double *jacp_, void *pa
 /*
  *  User function: flux
  */
-
-double HarmonicOscillator_flux(double t, const double y_[], void *params)
+int HarmonicOscillator_flux(double t, const double y_[], double *f, void *params)
 {
     double v, y;
     double k, c, F;
     double v_flux;
     double *p_;
+    int R=1;
+    if (f){
+     p_ = (double *) params;
 
-    p_ = (double *) params;
+     v          = y_[0];
+     y          = y_[1];
 
-    v          = y_[0];
-    y          = y_[1];
+     k          = p_[0];
+     c          = p_[1];
+     F          = p_[2];
 
-    k          = p_[0];
-    c          = p_[1];
-    F          = p_[2];
-
-    v_flux = -k*y+F-v*c;
-
-    return pow( (v*v)+(v_flux*v_flux),(1.0/2.0));
+     v_flux = -k*y+F-v*c;
+     f[0] = pow( (v*v)+(v_flux*v_flux),(1.0/2.0));
+    } 
+    return R;
 }
