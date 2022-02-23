@@ -60,6 +60,37 @@ by hand.
 This strategy makes the c files a bit more autonomous as sizes are not
 entirely taken on faith (from the supplied initial conditions).
 
+```c
+/* The vector field. */
+int HarmonicOscillator_vf(double t, const double y_[], double f_[], void *params)
+{
+    double v, y;
+    double k, c, F;
+    double v_flux;
+    double *p_;
+    int RET=GSL_SUCCESS;
+    if (y_ && f_){
+      p_ = (double *) params;
+
+      v          = y_[0];
+      y          = y_[1];
+
+      k          = p_[0];
+      c          = p_[1];
+      F          = p_[2];
+
+      v_flux = -k*y+F-v*c;
+
+      f_[0] = v_flux;
+      f_[1] = v;
+    } else {
+      RET=2;
+    }
+    return RET;
+}
+```
+
+
 ## Example File
 
 See the example file [HarmonicOscillator](./HarmonicOscillator_gvf.c)
