@@ -87,9 +87,11 @@ columns.
 OpenMP is used to make this set of simulations run in parallel, if
 possible.
 
-The result is returned to R as a 3-dimensional array of size _ny×nt×m_.
-
 The simulations can be more intricate if the [event system](EVENTS.md) is used.
+
+### Returns
+
+A 3-dimensional array `y` of size _ny×nt×m_ (state, time, parameter set).
 
 ### Usage Notes
 
@@ -141,6 +143,16 @@ Particularly, if you want to simulate a subset of experiments, you can
 remove unwanted items from the list easily (which is not as easy with
 plain `r_gsl_odeiv2()`, see above).
 
+### Returns
+
+a list `y` of the same size as the experiment list, each entry has a
+`[["state"]]` component and a `[["func"]]` component (it is filled in
+if `_func` exists). Each `y[[i]][["state"]]` is a matrix, where the
+second index corresponds to the output time points.
+
+The `func` component contains the output functions, as calculated by
+the `${MODEL}_func` function.
+
 ## Interface Function `r_gsl_odeiv2_outer`
 
 This interface is a mixture of the first two. We assume that the user
@@ -162,6 +174,38 @@ This interface has the advantage that the number of parameter columns
 does not have to correspond to the length of the experiments list. So,
 once again the list of experiments can be truncated to any subset of
 scenarios.
+
+The experiment list may contain an `input` field; if it exists, the
+input vector is *appended* to each `parameter` vector (at the
+end). Thus the input can describe *settings* that always remain the
+same within a given experiment. In that case the ODE functions (`_vf`,
+`_jac`, etc.)  must accept the concatenated `parameter_and_input`
+vector.
+
+`experiments`:
+
+- `time` simulation output time
+- `initial_value` *y(t=t₀)*
+- `input` partial parameter vector
+- `events` OPTIONAL
+    + `time` event occurence times (nt)
+	+ `tf` transformation 
+	    * `state` of y
+	        * `A` 3d-array (ny×ny×nt)
+		    * `b` 3d-array (kind of)
+	    * `param` of p
+	        * `A` 3d-array
+		    * `b` 3d-array (kind of)
+
+### Returns
+
+a list `y` of the same size as the experiment list, each entry has a
+`[["state"]]` component and a `[["func"]]` component (it is filled in
+if `_func` exists). Each `y[[i]][["state"]]` is a 3d array, where the
+last dimension corresponds to the columns of `parameters`.
+
+The `func` component contains the output functions, as calculated by
+the `${MODEL}_func` function.
 
 ## SBtabVFGEN
 
