@@ -22,7 +22,6 @@ event.tf <- function(t,state.tf,param.tf){
 }
 
 
-
 test.plain <-function(){
     name <- "HarmonicOscillator"
     t <- seq(0,13,length.out=120)
