@@ -8,6 +8,50 @@ model.so <- function(name){
     return(so)
 }
 
+transform <- function(lt=1,A=1,b=0){
+    n <- nrow(as.matrix(A))
+    m <- nrow(as.matrix(b))
+    A <- array(A,dim=c(n,n,lt))
+    b <- array(b,dim=c(m,1,lt));
+    return(list(A=A,b=b))
+}
+
+event.tf <- function(t,state.tf,param.tf){
+    tf <- list(state=state.tf,param=param.tf)
+    return(list(time=t,tf=tf))
+}
+
+
+
+test.plain <-function(){
+    name <- "HarmonicOscillator"
+    t <- seq(0,13,length.out=120)
+    N <- 3
+    ny <- 2
+    np <- 3
+    I3 <- diag(1,3,3)
+    I2 <- diag(1,2,2)
+
+    y0 <- matrix(c(0,1),nrow=ny,ncol=N)
+    p <- matrix(c(1,0,0),nrow=np,ncol=N)
+
+    for (i in 1:N) {
+        p[2,i]=(i-1); #/N
+    }
+    colnames(p) <- c("no friction","tiny amount of friction","lots of friction")
+    if (require("rgsl")){
+        y <- r_gsl_odeiv2(name,t=t,y0=y0,p=p)
+        plot(t,y[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+        for (l in 1:N) {
+            lines(t,y[2,,l],lty=l)
+        }
+        pty=1:N;
+        pty[2:N]<-NA;
+        legend("bottomright",legend=colnames(p),lty=1:N,pch=pty)
+    }
+    return(y)
+}
+
 
 test.events <-function(){
     name <- "HarmonicOscillator"
@@ -15,36 +59,32 @@ test.events <-function(){
     N <- 3
     ny <- 2
     np <- 3
+    I3 <- diag(1,3,3)
+    I2 <- diag(1,2,2)
+
     y0 <- matrix(c(0,1),nrow=ny,ncol=N)
     p <- matrix(c(1,0,0),nrow=np,ncol=N)
+
     for (i in 1:N) {
         p[2,i]=(i-1); #/N
     }
-    colnames(p) <- c("no firction","tiny amount of friction","lots of friction")
+    colnames(p) <- c("no friction","tiny amount of friction","lots of friction")
     ## events:
-    t.event <- c(1.0,2.0,3.0)
-    lt <- length(t.event)
-    ## 2-dim and 3-dim identity matrix
-    I3 <- diag(1,3,3)
-    I2 <- diag(1,2,2)
-    ## the state is reset to initial
-    M <- array(I2,dim=c(ny,ny,lt))
-    K <- array(I3,dim=c(np,np,lt))
-    print(dim(M))
-    ## y[i] <- v[i]*y[i] + a[i]
-    ## p <- B %*% p + b
     all.events=list()
-    for (i in 1:N){
-        a <- array(c(1,0),dim=c(ny,1,lt));
-        b <- array(c(0,i*0.1,0),dim=c(np,1,lt));
-        state.tf <- list(A=M,b=a)
-        param.tf <- list(A=K,b=b)
-        tf <- list(state=state.tf,param=param.tf)
-        ev <- list(time=t.event,tf=tf)
-        print(ev)
-        all.events[[i]]  <- ev
-    }
+    event.t <- c(1.0,2.0,3.0)
+    state.tf <- transform(length(event.t),I2,c(1,0))
+
+    param.tf <- transform(length(event.t),I3,c(0,0,0))
+    all.events[[1]] <- event.tf(event.t,state.tf,param.tf)
+
+    param.tf <- transform(length(event.t),I3,c(0,0.1,0))
+    all.events[[2]] <- event.tf(event.t,state.tf,param.tf)
+
+    param.tf <- transform(length(event.t),I3,c(0,0.2,0))
+    all.events[[3]] <- event.tf(event.t,state.tf,param.tf)
+
     names(all.events) <- colnames(p);
+    
     if (require("rgsl")){
         y <- r_gsl_odeiv2(name,t=t,y0=y0,p=p,all.events)
         plot(t,y[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
@@ -58,18 +98,6 @@ test.events <-function(){
     return(y)
 }
 
-transform <- function(lt=1,A=1,b=0){
-    n <- nrow(as.matrix(A))
-    m <- nrow(as.matrix(b))
-    A <- array(A,dim=c(n,n,lt))
-    b <- array(b,dim=c(m,1,lt));
-    return(list(A=A,b=b))
-}
-
-event.tf <- function(t,state.tf,param.tf){
-    tf <- list(state=state.tf,param=param.tf)
-    return(list(time=t,tf=tf))
-}
 
 
 test.experiments <-function(){
@@ -102,6 +130,40 @@ test.experiments <-function(){
         pty=1:N;
         pty[2:N]<-NA;
         legend("bottomright",legend=names(experiments),lty=1:N,pch=pty)
+    }
+    return(y)
+}
+
+test.outer <-function(){
+    name <- "HarmonicOscillator"
+    t <- seq(0,13,length.out=120)
+    ## 2-dim and 3-dim identity matrix
+    I3 <- diag(1,3,3)
+    I2 <- diag(1,2,2)
+    N <- 1
+    event.t <- c(1.0)
+    M <- 4
+    param <- matrix(rnorm(M,mean=1,sd=0.2),nrow=1,ncol=M)
+    
+    state.tf <- transform(length(event.t),I2,c(1,0))
+
+    param.tf <- transform(length(event.t),I3,c(0,0,0))
+    no.friction <- list(time=t,input=c(0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+
+    experiments=list(a=no.friction)
+    
+    if (require("rgsl")){
+        y <- r_gsl_odeiv2_outer(name,experiments,param)
+        plot(t,y[[1]][["state"]][2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+        for (l in 1:N) {
+        for (k in 1:M){
+            lines(t,y[[l]][["state"]][2,,k],lty=l)
+        }
+        }
+        pty=1:M;
+        pty[2:M]<-NA;
+        legend("bottomright",legend=sprintf("%4.3g",param),lty=1:N,pch=pty)
+
     }
     return(y)
 }

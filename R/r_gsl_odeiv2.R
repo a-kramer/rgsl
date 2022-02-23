@@ -78,3 +78,39 @@ r_gsl_odeiv2_sim <- function(name,experiments){
     return(y)
 }
 
+
+#' Initial Value Problem solution in C
+#'
+#' This is a wrapper. It uses the .Call function to call the C
+#' function r_gsl_odeiv2_outer(). The C program solves a set of ODE intial
+#' value problems and returns the trajectory y(t;p) for every real
+#' valued parameter vector p. We use the solvers from the GNU
+#' Scientific Library module odeiv2.
+#'
+#' The model will be simulated N×M times, where N is the number of
+#' simulation experiments and M the number of columns in the p
+#' matrix. The output is an N-sized list of 3 dimensional arrays y,
+#' with y[i,j,k] corresponding to state variable i, time t[j], and
+#' parameter set p[,k].
+#' 
+#' @param model_name the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)
+#' @param experiments a list of N simulation experiments (time, parameters, initial value, events)
+#' @param p a matrix of parameters with M columns
+#' @return the solution trajectories y(t;p) for all experiments
+#' @keywords ODE
+#' @useDynLib rgsl, odeiv_outer=r_gsl_odeiv2_outer
+#' @export
+#' @examples
+#' y0 <- c(0,1)
+#' t <- seq(0,1,length.out=100)
+#' u <- c(0,0)
+#' e <- list(time=t,input=u,initial_value=y0)
+#' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
+r_gsl_odeiv2_outer <- function(name,experiments,p){
+    so <- paste0(name,".so")
+    stopifnot(file.exists(so))
+    stopifnot(is.matrix(p))
+    y <- .Call(odeiv_outer,name,experiments,p)
+    return(y)
+}
+

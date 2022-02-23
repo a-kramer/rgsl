@@ -508,6 +508,7 @@ r_gsl_odeiv2_simulate(
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   assert(IS_CHARACTER(model_name));
   assert(IS_LIST(experiments));
+
   int N=GET_LENGTH(experiments);
   printf("[%s] simulating %i experiments\n",__func__,N);
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
@@ -584,6 +585,123 @@ r_gsl_odeiv2_simulate(
     }
     yf_list=PROTECT(NEW_LIST(2));
     
+    SET_VECTOR_ELT(yf_list,0,Y);
+    SET_VECTOR_ELT(yf_list,1,F);
+    set_names(yf_list,yf_names,2);
+    SET_VECTOR_ELT(res_list,i,yf_list);
+
+    gsl_odeiv2_driver_free(driver);
+  }
+  UNPROTECT(4*N);
+  UNPROTECT(1);
+  return res_list;
+}
+
+
+/* This prgram loads an ODE model, specified for `gsl_odeiv2`.  It
+   simulates the model for each entry in a list of named items, each
+   describing a single initial value problem  (y0, t, parameters p, events). 
+   ``` 
+   y'=f(y,t;p) y0=y(t[0]) 
+   ``` 
+*/
+Rdata /* the trajectories as a list (same size as experiments) */
+r_gsl_odeiv2_outer(
+ Rdata model_name, /* a string */
+ Rdata experiments, /* a list of simulation experiments */
+ Rdata parameters) /* a matrix of parameterization columns*/
+{ 
+  int i,j,k,l;
+  double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+  assert(IS_CHARACTER(model_name));
+  assert(IS_LIST(experiments));
+  assert(IS_NUMERIC(parameters));
+  int N=GET_LENGTH(experiments);
+  size_t np=nrows(parameters);
+  size_t M=ncols(parameters);
+    
+  printf("[%s] simulating %i experiment, with %li parameter sets each\n",__func__,N,M);
+  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+  gsl_odeiv2_driver *driver;
+  Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
+  Rdata yf_list;
+  Rdata input;
+  const char *yf_names[2]={"state","func"};
+  Rdata Y;
+  Rdata iv, t;
+  gsl_vector_view initial_value, time;
+  gsl_matrix_view y;
+  size_t ny, nt, nf, nu;
+  int status;
+  Rdata experiment_names=GET_NAMES(experiments);
+  Rdata field_names;
+  event_t *ev;
+
+  double *p;
+  jacp dfdp=NULL;
+  func observable=NULL;
+  Rdata F;
+  double *f;
+  double fsum;
+  gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+  printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+
+#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p) firstprivate(sys,res_list,yf_names)
+  for (i=0;i<N;i++){
+    driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+    p=malloc(sizeof(double)*(np+nu));
+    printf("[%s] solving %i of %i.\n",__func__,i,N);
+
+    iv = from_list(VECTOR_ELT(experiments,i),"initial_value");
+    t = from_list(VECTOR_ELT(experiments,i),"time");
+    ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events"));
+    input = from_list(VECTOR_ELT(experiments,i),"input");
+    nu=(input && input!=R_NilValue)?length(input):0;
+    if (nu) memcpy(p+np,REAL(input),nu*sizeof(double));
+    
+    ny=length(iv);
+    nt=length(t);
+    assert(ny>0 && nt>0 && ny==sys.dimension);
+    
+    initial_value=gsl_vector_view_array(REAL(iv),ny);
+    time=gsl_vector_view_array(REAL(t),nt);
+
+    assert(sys.params);
+    
+    Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+    F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+    for (k=0;k<M;k++){
+      y=gsl_matrix_view_array(REAL(Y)+(nt*ny*k),nt,ny);
+      assert((y.matrix).data);
+      memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
+      sys.params = p;
+      status=simulate_timeseries(
+	 sys,
+	 driver,
+	 &(initial_value.vector),
+	 &(time.vector),
+	 ev,
+	 &(y.matrix)
+	);
+      printf("[%s] done.\n",__func__);
+      fflush(stdout);
+      assert(status==GSL_SUCCESS);
+      if (observable) {
+	printf("model functions exist.\n");
+	fflush(stdout);
+	nf=observable(0,NULL,NULL,NULL);
+	printf("calculating %li functions:",nf);
+	fflush(stdout);
+	fsum=0;
+	for (j=0;j<nt;j++){
+	  f=REAL(F)+(0+j*nf+k*nf*nt);
+	  assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+	  for (l=0;l<nf; l++) fsum+=f[l];
+	}
+	printf("sum(func)=%g\n",fsum);
+      }
+    }
+    yf_list=PROTECT(NEW_LIST(2));    
     SET_VECTOR_ELT(yf_list,0,Y);
     SET_VECTOR_ELT(yf_list,1,F);
     set_names(yf_list,yf_names,2);
