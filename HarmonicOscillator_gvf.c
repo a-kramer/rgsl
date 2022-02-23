@@ -54,7 +54,7 @@ int HarmonicOscillator_jac(double t, const double y_[], double *jac_, double *df
     double *p_;
     int RET=GSL_SUCCESS;
     
-    if (y_ && jac_ && dfdt_ && p){
+    if (y_ && jac_ && dfdt_){
       p_ = (double *) params;
 
       v          = y_[0];
