@@ -174,9 +174,11 @@ event_t* event_from_R(Rdata E){
   int lt=length(time);
   event->time = REAL(time);
   event->nt=lt;
+#ifdef DEBUG_PRINT
   printf("[%s] event times:",__func__);
   for (j=0;j<lt;j++) printf("\t%g",event->time[j]);
   putchar('\n');
+#endif
   return event;
 }
 
@@ -194,7 +196,9 @@ model_function(const char *model_name, /* the base name of the model */
   char *f=malloc(sizeof(char)*size);
   assert(f);
   strcat(strcpy(f,model_name),suffix);
+#ifdef DEBUG_PRINT
   fprintf(stderr,"[%s] «%s»\n",__func__,f); fflush(stderr);
+#endif
   return f;
 }
 
@@ -210,7 +214,9 @@ void *load_or_exit(void *lib, /* file pointer, previously opened via `dlopen()` 
   assert(lib && name);
   void *symbol=dlsym(lib,name);
   if (symbol) {
+#ifdef DEBUG_PRINT    
     fprintf(stderr,"[%s] «%s» loaded successfully.\n",__func__,name);
+#endif
     if (opt==FREE_ON_SUCCESS){
       free(name);
     }
@@ -263,7 +269,9 @@ load_system(
   if (!n) n=f(0,NULL,NULL,NULL);
   gsl_odeiv2_system sys={f,dfdy,n,p};
   free(so);
+#ifdef DEBUG_PRINT  
   fprintf(stderr,"[%s] ode system created.\n",__func__); fflush(stderr);
+#endif
   return sys;
 }
 
@@ -324,7 +332,9 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
     tf=gsl_vector_get(time,j);
     if (event && i<event->nt && event->time[i] < tf) {
       te=event->time[i];
+#ifdef DEBUG_PRINT      
       printf("[%s] a scheduled event occurs at t=%g.\n",__func__,te);
+#endif      
       status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
       assert(status==GSL_SUCCESS);
       apply_tf(event->state,y->data,i);
@@ -400,7 +410,9 @@ r_gsl_odeiv2(
     assert(isVector(y0));
     ny=length(y0);
   }
+#ifdef DEBUG_PRINT
   printf("[%s] ny=%li, np=%li, N=%li.\n",__func__,ny,np,N);
+#endif
   gsl_vector_view t=gsl_vector_view_array(REAL(tspan),nt);
   gsl_matrix_view initial_value = gsl_matrix_view_array(REAL(y0),N,ny);
   gsl_matrix_view ode_parameter = gsl_matrix_view_array(REAL(p),N,np);
@@ -408,7 +420,9 @@ r_gsl_odeiv2(
   // load system from file
   jacp dfdp;
   gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), ny, REAL(p), &dfdp, NULL);
+#ifdef DEBUG_PRINT
   printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+#endif
 
   // check whether events are happening during integration:
   int l,lt;
@@ -462,7 +476,9 @@ r_gsl_odeiv2(
 #pragma omp parallel for private(driver,y,iv_row) firstprivate(sys,ydata,initial_value,t)
   for (i=0;i<N;i++){
     driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+#ifdef DEBUG_PRINT
     printf("[%s] solving %i of %li.\n",__func__,i,N);
+#endif
     y=gsl_matrix_view_array(&(ydata[i*nyt]),nt,ny);
     sys.params = gsl_matrix_ptr(&(ode_parameter.matrix),i,0);
     iv_row=gsl_matrix_row(&(initial_value.matrix),i);
@@ -510,7 +526,9 @@ r_gsl_odeiv2_simulate(
   assert(IS_LIST(experiments));
 
   int N=GET_LENGTH(experiments);
+#ifdef DEBUG_PRINT
   printf("[%s] simulating %i experiments\n",__func__,N);
+#endif
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver;
   Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
@@ -532,13 +550,15 @@ r_gsl_odeiv2_simulate(
   double *f;
   double fsum;
   gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+#ifdef DEBUG_PRINT
   printf("[%s] system dimension: %li\n",__func__,sys.dimension);
-
+#endif
 #pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list) firstprivate(sys,res_list,yf_names)
   for (i=0;i<N;i++){
     driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+#ifdef DEBUG_PRINT    
     printf("[%s] solving %i of %i.\n",__func__,i,N);
-
+#endif
     iv = from_list(VECTOR_ELT(experiments,i),"initial_value");
     t = from_list(VECTOR_ELT(experiments,i),"time");
     ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events"));
@@ -564,17 +584,23 @@ r_gsl_odeiv2_simulate(
        ev,
        &(y.matrix)
     );
+#ifdef DEBUG_PRINT    
     printf("[%s] done.\n",__func__);
+#endif
     fflush(stdout);
     
     assert(status==GSL_SUCCESS);
     if (observable) {
+#ifdef DEBUG_PRINT
       printf("model functions exist.\n");
-      fflush(stdout);
+#endif
       nf=observable(0,NULL,NULL,NULL);
+#ifdef DEBUG_PRINT
       printf("calculating %li functions:",nf);
-      fflush(stdout);
+#endif
+      
       F=PROTECT(allocMatrix(REALSXP,nf,nt));
+#ifdef DEBUG_PRINT
       fsum=0;
       for (j=0;j<nt;j++){
 	f=&(REAL(F)[j*nf]);
@@ -582,6 +608,7 @@ r_gsl_odeiv2_simulate(
 	for (k=0;k<nf; k++) fsum+=f[k];
       }
       printf("sum(func)=%g\n",fsum);
+#endif
     }
     yf_list=PROTECT(NEW_LIST(2));
     
@@ -619,8 +646,9 @@ r_gsl_odeiv2_outer(
   int N=GET_LENGTH(experiments);
   size_t np=nrows(parameters);
   size_t M=ncols(parameters);
-    
+#ifdef DEBUG_PRINT    
   printf("[%s] simulating %i experiment, with %li parameter sets each\n",__func__,N,M);
+#endif
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver;
   Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
@@ -644,13 +672,17 @@ r_gsl_odeiv2_outer(
   double *f;
   double fsum;
   gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+#ifdef DEBUG_PRINT
   printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+#endif
 
 #pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p) firstprivate(sys,res_list,yf_names)
   for (i=0;i<N;i++){
     driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
     p=malloc(sizeof(double)*(np+nu));
+#ifdef DEBUG_PRINT
     printf("[%s] solving %i of %i.\n",__func__,i,N);
+#endif
 
     iv = from_list(VECTOR_ELT(experiments,i),"initial_value");
     t = from_list(VECTOR_ELT(experiments,i),"time");
@@ -683,15 +715,19 @@ r_gsl_odeiv2_outer(
 	 ev,
 	 &(y.matrix)
 	);
+#ifdef DEBUG_PRINT
       printf("[%s] done.\n",__func__);
-      fflush(stdout);
+#endif
+      
       assert(status==GSL_SUCCESS);
       if (observable) {
+#ifdef DEBUG_PRINT
 	printf("model functions exist.\n");
-	fflush(stdout);
+#endif
+
 	nf=observable(0,NULL,NULL,NULL);
+#ifdef DEBUG_PRINT
 	printf("calculating %li functions:",nf);
-	fflush(stdout);
 	fsum=0;
 	for (j=0;j<nt;j++){
 	  f=REAL(F)+(0+j*nf+k*nf*nt);
@@ -699,6 +735,7 @@ r_gsl_odeiv2_outer(
 	  for (l=0;l<nf; l++) fsum+=f[l];
 	}
 	printf("sum(func)=%g\n",fsum);
+#endif
       }
     }
     yf_list=PROTECT(NEW_LIST(2));    

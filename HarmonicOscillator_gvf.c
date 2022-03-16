@@ -123,11 +123,9 @@ int HarmonicOscillator_func(double t, const double y_[], double *f, void *params
     double v, y;
     double k, c, F;
     double v_flux;
-    double *p_;
+    double *p_ = params;
     int RET=GSL_SUCCESS;
     if (f){
-      p_ = (double *) params;
-
       v          = y_[0];
       y          = y_[1];
 
@@ -136,7 +134,7 @@ int HarmonicOscillator_func(double t, const double y_[], double *f, void *params
       F          = p_[2];
 
       v_flux = -k*y+F-v*c;
-      f[0] = pow( (v*v)+(v_flux*v_flux),(1.0/2.0));
+      f[0] = sqrt(v*v+v_flux*v_flux);
     } else {
       RET=1;
     }
