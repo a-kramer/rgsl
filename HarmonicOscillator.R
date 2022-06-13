@@ -1,6 +1,6 @@
 model.so <- function(name){
-    LIBS <- "-lgsl -lgslcblas -lm"
-    CFLAGS <- "-shared -fPIC -Wall -O2"
+    LIBS <- "`pkg-config --libs gsl`"
+    CFLAGS <- "-shared -fPIC -Wall -O2 `pkg-config --cflags gsl`"
     so <- sprintf("%s.so",name)
     if (!file.exists(so)){
         system2("gcc",sprintf("%s -o %s %s_gvf.c %s",CFLAGS,so,name,LIBS))
