@@ -1,2 +1,3 @@
-PKG_CFLAGS = $(SHLIB_OPENMP_CFLAGS) `pkg-config --cflags gsl` 
+CC = cc
+PKG_CFLAGS = $(SHLIB_OPENMP_CFLAGS) `pkg-config --cflags gsl`
 PKG_LIBS = $(SHLIB_OPENMP_CFLAGS) `pkg-config --libs gsl` -ldl
