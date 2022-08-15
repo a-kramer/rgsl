@@ -231,7 +231,7 @@ void *load_or_exit(void *lib, /* file pointer, previously opened via `dlopen()` 
 		}
 	}else{
 		fprintf(stderr,"[%s] %s\n",__func__,dlerror());
-		abort();
+		/*abort();*/
 	}
 	return symbol;
 }
@@ -269,7 +269,7 @@ load_system(
 		}
 
 		symbol_name=model_function(model_name,"_func");
-		if (symbol_name && ){
+		if (symbol_name && F){
 			*F=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 	} else {
@@ -563,7 +563,7 @@ r_gsl_odeiv2_simulate(
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
-#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list) firstprivate(sys,res_list,yf_names)
+#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,j,k,field_names) firstprivate(sys,yf_names,observable)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 #ifdef DEBUG_PRINT
@@ -606,17 +606,22 @@ r_gsl_odeiv2_simulate(
 #endif
 			nf=observable(0,NULL,NULL,NULL);
 #ifdef DEBUG_PRINT
-			printf("calculating %li functions:",nf);
+			printf("calculating %li function(s):\n",nf);
 #endif
-
 			F=PROTECT(allocMatrix(REALSXP,nf,nt));
-#ifdef DEBUG_PRINT
 			fsum=0;
 			for (j=0;j<nt;j++){
-	f=&(REAL(F)[j*nf]);
-	assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
-	for (k=0;k<nf; k++) fsum+=f[k];
+				f=&(REAL(F)[j*nf]);
+				assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+				for (k=0;k<ny; k++){
+					printf("[%s] y[%i](t%i) = %g\n",__func__,k,j,gsl_matrix_get(&(y.matrix),j,k));
+				}
+				for (k=0;k<nf; k++){
+					printf("[%s] f[%i](t%i) = %g\n",__func__,k,j,f[k]);
+					fsum+=f[k];
+				}
 			}
+#ifdef DEBUG_PRINT
 			printf("sum(func)=%g\n",fsum);
 #endif
 		}
@@ -629,18 +634,18 @@ r_gsl_odeiv2_simulate(
 
 		gsl_odeiv2_driver_free(driver);
 	}
-	UNPROTECT(4*N);
-	UNPROTECT(1);
+	//UNPROTECT(4*N);
+	//UNPROTECT(1);
 	return res_list;
 }
 
 
 /* This prgram loads an ODE model, specified for `gsl_odeiv2`.	It
 	 simulates the model for each entry in a list of named items, each
-	 describing a single initial value problem	(y0, t, parameters p, events). 
-	 ``` 
-	 y'=f(y,t;p) y0=y(t[0]) 
-	 ``` 
+	 describing a single initial value problem	(y0, t, parameters p, events).
+	 ```
+	 y'=f(y,t;p) y0=y(t[0])
+	 ```
 */
 Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_outer(
@@ -686,7 +691,7 @@ r_gsl_odeiv2_outer(
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
 
-#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p) firstprivate(sys,res_list,yf_names)
+#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p,j,k,l) firstprivate(sys,res_list,yf_names)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		p=malloc(sizeof(double)*(np+nu));
@@ -718,17 +723,16 @@ r_gsl_odeiv2_outer(
 			memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
 			sys.params = p;
 			status=simulate_timeseries(
-	 sys,
-	 driver,
-	 &(initial_value.vector),
-	 &(time.vector),
-	 ev,
-	 &(y.matrix)
-	);
+              sys,
+              driver,
+              &(initial_value.vector),
+              &(time.vector),
+              ev,
+              &(y.matrix)
+             );
 #ifdef DEBUG_PRINT
 			printf("[%s] done.\n",__func__);
 #endif
-
 			assert(status==GSL_SUCCESS);
 			if (observable) {
 #ifdef DEBUG_PRINT
@@ -738,12 +742,17 @@ r_gsl_odeiv2_outer(
 	nf=observable(0,NULL,NULL,NULL);
 #ifdef DEBUG_PRINT
 	printf("calculating %li functions:",nf);
+#endif
 	fsum=0;
 	for (j=0;j<nt;j++){
 		f=REAL(F)+(0+j*nf+k*nf*nt);
 		assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
-		for (l=0;l<nf; l++) fsum+=f[l];
+		for (l=0;l<nf; l++) {
+			printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
+			fsum+=f[l];
+		}
 	}
+#ifdef DEBUG_PRINT
 	printf("sum(func)=%g\n",fsum);
 #endif
 			}

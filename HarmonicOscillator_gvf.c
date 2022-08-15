@@ -11,7 +11,8 @@
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_odeiv.h>
-
+#include <stdio.h>
+#include <stdlib.h>
 /*
  *  The vector field.
  */
@@ -134,8 +135,11 @@ int HarmonicOscillator_func(double t, const double y_[], double *f, void *params
       F          = p_[2];
 
       v_flux = -k*y+F-v*c;
-      f[0] = sqrt(v*v+v_flux*v_flux);
+
+      f[0] = sqrt(y*y+v*v);
+      fprintf(stderr,"[%s] sqrt((%g)^2 + (%g)^2) = %g\n",__func__,y,v,f[0]);  fflush(stderr);
     } else {
+      fprintf(stderr,"[%s] called with no args, returning length of f\n",__func__);  fflush(stderr);
       RET=1;
     }
     return RET;
