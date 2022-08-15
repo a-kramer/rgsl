@@ -57,8 +57,10 @@ int in_list(Rdata names, const char *name){
 	char *t=strtok(str," ");
 	while (t){
 		for (i=0;i<N;i++){
-			if (strcmp(CHAR(STRING_ELT(names,i)),t) == MATCH)
+			if (strcmp(CHAR(STRING_ELT(names,i)),t) == MATCH){
+				free(str);
 				return i;
+			}
 		}
 		t=strtok(NULL," ");
 	}
@@ -265,8 +267,9 @@ load_system(
 			symbol_name=model_function(model_name,"_jacp");
 			*dfdp=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		}
-		if (F){
-			symbol_name=model_function(model_name,"_func");
+
+		symbol_name=model_function(model_name,"_func");
+		if (symbol_name && ){
 			*F=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 	} else {
