@@ -69,7 +69,7 @@ int in_list(Rdata names, const char *name){
 }
 
 Rdata from_list(Rdata List, const char *name){
-	assert(isVector(List));
+	if (!isVector(List)) return R_NilValue;
 	Rdata names = GET_NAMES(List);
 	int i=in_list(names,name);
 	Rdata E=R_NilValue;
@@ -123,6 +123,13 @@ affine_transformation(
 	return L;
 }
 
+void free_tf(affine_tf *L){
+	if (L){
+		gsl_vector_free(L->y);
+		free(L);
+	}
+}
+
 /* This function applies a affine transformation to the vector z. We
 	 assume that A and b and z in the input are all of sufficient size:
 	 n×n for matrices and n for vectors. A can be n-sized as well, if A
@@ -169,13 +176,14 @@ apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vecto
 	return status;
 }
 
-
 event_t* event_from_R(Rdata E){
 	int j;
 	event_t *event=malloc(sizeof(event_t));
 	Rdata tf=from_list(E,"tf");
+	if (tf == R_NilValue) return NULL;
 	Rdata state_tf=from_list(tf,"state");
 	Rdata param_tf=from_list(tf,"param");
+	if (state_tf == R_NilValue || param_tf == R_NilValue) return NULL;
 	event->state=affine_transformation(from_list(state_tf,"A"),from_list(state_tf,"b"));
 	event->par=affine_transformation(from_list(param_tf,"A"),from_list(param_tf,"b"));
 
@@ -189,6 +197,15 @@ event_t* event_from_R(Rdata E){
 	putchar('\n');
 #endif
 	return event;
+}
+
+void event_free(event_t **ev){
+	if (ev && *ev){
+		free_tf((*ev)->state);
+		free_tf((*ev)->par);
+		free(*ev);
+		*ev=NULL;
+	}
 }
 
 /*This function allocates memory and concatenates two strings in that
@@ -328,8 +345,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	gsl_vector_memcpy(y,y0);
 
 	gsl_vector_view Yout_row;
-	int i=0;
-	int j;
+	int i=0,j;
 	double t,tf,te;
 	double dfdt[ny];
 	int status;
@@ -386,24 +402,14 @@ r_gsl_odeiv2(
  Rdata p, /* parameter matrix */
  Rdata event) /* list of events */
 {
-	int i,j;
-	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	assert(IS_CHARACTER(model_name));
 	assert(IS_NUMERIC(tspan));
 	assert(IS_NUMERIC(y0));
 	assert(IS_NUMERIC(p));
-
-	/* We will solve the ODE several times: p may be a matrix, with each
-		 column providing a different parameterisation of the initial
-		 value problem. We solve the ode one for each parameter vector
-		 (a column).
-
-		 But, R stores matrices column-wise while GSL stores them row-wise.
-		 To compensate, we switch the roles here.
-	*/
+	int i,j;
+	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	size_t nt=length(tspan);
-	size_t ny;
-	size_t np,N;
+	size_t ny,np,N;
 	Rdata experiment_names;
 	int ExperimentsAreNamed = 0;
 	if (isMatrix(p)){
@@ -436,44 +442,25 @@ r_gsl_odeiv2(
 
 	// check whether events are happening during integration:
 	int l,lt;
-	double *event_time;
-	Rdata event_names;
-	Rdata E;
-	Rdata temp;
+	Rdata event_names,E;
 	event_t **ev=calloc(N,sizeof(event_t*));
 	if (event && event != R_NilValue){
 		l=length(event);
 		if (ExperimentsAreNamed){
 			event_names=GET_NAMES(event);
 			for (i=0;i<l;i++){
-	j=in_list(experiment_names,CHAR(VECTOR_ELT(event_names,i)));
-	ev[j] = event_from_R(VECTOR_ELT(event, i));
+				j=in_list(experiment_names,CHAR(VECTOR_ELT(event_names,i)));
+				ev[j] = event_from_R(VECTOR_ELT(event, i));
 			}
 		} else {
 			assert(l==N);
 			for (i=0;i<l;i++){
-	ev[i] = event_from_R(VECTOR_ELT(event, i));
+				ev[i] = event_from_R(VECTOR_ELT(event, i));
 			}
 		}
 	}
-
-	/* Rdata dM=GET_DIM(M); */
-	/* assert(IS_NUMERIC(dM) && IS_INTEGER(dM)); */
-	/* int M_nd = length(dM); */
-	/* printf("[%s] M has %i indices:\n",__func__,M_nd); */
-	/* for (i=0;i<M_nd;i++) printf("\t%i",INTEGER(dM)[i]); */
-	/* putchar('\n'); */
-
-	/* Rdata dK=GET_DIM(K); */
-	/* assert(IS_NUMERIC(dK) && IS_INTEGER(dK)); */
-	/* int K_nd = length(dK); */
-	/* printf("[%s] K has %i indices:\n",__func__,K_nd); */
-	/* for (i=0;i<K_nd;i++) printf("\t%i",INTEGER(dK)[i]); */
-	/* putchar('\n'); */
-
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
-
 	Rdata Y = PROTECT(alloc3DArray(REALSXP,ny,nt,N));
 	double *ydata;
 	gsl_vector_view iv_row;
@@ -481,8 +468,6 @@ r_gsl_odeiv2(
 	gsl_matrix_view y;
 	int status;
 	ydata = REAL(Y);
-
-
 #pragma omp parallel for private(driver,y,iv_row) firstprivate(sys,ydata,initial_value,t)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
@@ -531,7 +516,7 @@ r_gsl_odeiv2_simulate(
  Rdata experiments) /* a list of simulation experiments */
 {
 	int i,j,k;
-	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+	double *f, abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	assert(IS_CHARACTER(model_name));
 	assert(IS_LIST(experiments));
 
@@ -542,28 +527,20 @@ r_gsl_odeiv2_simulate(
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
-	Rdata yf_list;
 	const char *yf_names[2]={"state","func"};
-	Rdata Y;
-	Rdata iv, t;
+	Rdata iv, t, field_names, F, Y, yf_list;
+	Rdata experiment_names=GET_NAMES(experiments);
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf;
-	int status;
-	Rdata experiment_names=GET_NAMES(experiments);
-	Rdata field_names;
-	event_t *ev;
-
+	event_t *ev=NULL;
 	jacp dfdp=NULL;
 	func observable=NULL;
-	Rdata F;
-	double *f;
-	double fsum;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
-#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,j,k,field_names,nf,nt,ny) firstprivate(sys,yf_names,observable)
+#pragma omp parallel for private(driver,y,ev,iv,t,time,initial_value,Y,F,f,yf_list,j,k,field_names,nf,nt,ny) firstprivate(sys,yf_names,observable)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 #ifdef DEBUG_PRINT
@@ -584,48 +561,32 @@ r_gsl_odeiv2_simulate(
 
 		Y=PROTECT(allocMatrix(REALSXP,ny,nt));
 		y=gsl_matrix_view_array(REAL(Y),nt,ny);
-		assert((y.matrix).data);
 
-		status=simulate_timeseries(
-			 sys,
-			 driver,
-			 &(initial_value.vector),
-			 &(time.vector),
-			 ev,
-			 &(y.matrix)
-		);
+		if (observable){
+			nf=observable(0,NULL,NULL,NULL);
+			F=PROTECT(allocMatrix(REALSXP,nf,nt));
+		}
+		assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
 #ifdef DEBUG_PRINT
 		printf("[%s] done.\n",__func__);
 #endif
 		fflush(stdout);
-
-		assert(status==GSL_SUCCESS);
 		if (observable) {
-#ifdef DEBUG_PRINT
-			printf("model functions exist.\n");
-#endif
-			nf=observable(0,NULL,NULL,NULL);
 #ifdef DEBUG_PRINT
 			printf("calculating %li function(s):\n",nf);
 #endif
-			F=PROTECT(allocMatrix(REALSXP,nf,nt));
-			fsum=0;
 			for (j=0;j<nt;j++){
 				f=&(REAL(F)[j*nf]);
-				observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+				assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
 			}
-#ifdef DEBUG_PRINT
-			printf("sum(func)=%g\n",fsum);
-#endif
 		}
 		yf_list=PROTECT(NEW_LIST(2));
-
 		SET_VECTOR_ELT(yf_list,0,Y);
 		SET_VECTOR_ELT(yf_list,1,F);
 		set_names(yf_list,yf_names,2);
 		SET_VECTOR_ELT(res_list,i,yf_list);
-
 		gsl_odeiv2_driver_free(driver);
+		event_free(&ev);
 		UNPROTECT(2);
 		if (observable) UNPROTECT(1);
 	}
@@ -634,15 +595,122 @@ r_gsl_odeiv2_simulate(
 }
 
 
-/* This prgram loads an ODE model, specified for `gsl_odeiv2`.	It
+/* This prgram loads an ODE model, with functions compatible with `gsl_odeiv2` 
+	(see odeiv2 documentation on the GSL webpage). It
 	 simulates the model for each entry in a list of named items, each
-	 describing a single initial value problem	(y0, t, parameters p, events).
+	 describing a single initial value problem (`y0`, `t`, parameters `p`, events).
 	 ```
 	 y'=f(y,t;p) y0=y(t[0])
 	 ```
+	 This function is parallel in the list of supplied experiments.
 */
 Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_outer(
+ Rdata model_name, /* a string */
+ Rdata experiments, /* a list of simulation experiments */
+ Rdata parameters) /* a matrix of parameterization columns*/
+{
+	assert(IS_CHARACTER(model_name));
+	assert(IS_LIST(experiments));
+	assert(IS_NUMERIC(parameters));
+
+	int i,j,k,l;
+	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+	int N=GET_LENGTH(experiments);
+	size_t np=nrows(parameters);
+	size_t M=ncols(parameters);
+#ifdef DEBUG_PRINT
+	printf("[%s] simulating %i experiment, with %li parameter sets each\n",__func__,N,M);
+#endif
+	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+	gsl_odeiv2_driver *driver;
+	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
+	Rdata yf_list, input, Y, F, iv, t, field_names;
+	const char *yf_names[2]={"state","func"};
+	gsl_vector_view initial_value, time;
+	gsl_matrix_view y;
+	size_t ny, nt, nf, nu;
+	Rdata experiment_names=GET_NAMES(experiments);
+	event_t *ev=NULL;
+	double *p, *f;
+	jacp dfdp=NULL;
+	func observable=NULL;
+	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+#ifdef DEBUG_PRINT
+	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+#endif
+
+#pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
+	for (i=0;i<N;i++){
+		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+		p=malloc(sizeof(double)*(np+nu));
+#ifdef DEBUG_PRINT
+		printf("[%s] solving %i of %i.\n",__func__,i,N);
+#endif
+		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
+		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
+		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
+		input = from_list(VECTOR_ELT(experiments,i),"input");
+		nu=(input && input!=R_NilValue)?length(input):0;
+		if (nu) memcpy(p+np,REAL(input),nu*sizeof(double));
+		ny=length(iv);
+		nt=length(t);
+		assert(ny>0 && nt>0 && ny==sys.dimension);
+		initial_value=gsl_vector_view_array(REAL(iv),ny);
+		time=gsl_vector_view_array(REAL(t),nt);
+		assert(sys.params);
+		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+		if (observable){
+			nf=observable(0,NULL,NULL,NULL);
+			F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+		}
+		for (k=0;k<M;k++){
+			y=gsl_matrix_view_array(REAL(Y)+(nt*ny*k),nt,ny);
+			assert((y.matrix).data);
+			memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
+			sys.params = p;
+			assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
+#ifdef DEBUG_PRINT
+			printf("[%s] done.\n",__func__);
+#endif
+			if (observable) {
+#ifdef DEBUG_PRINT
+				printf("calculating %li functions:",nf);
+#endif
+				for (j=0;j<nt;j++){
+					f=REAL(F)+(0+j*nf+k*nf*nt);
+					assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+					for (l=0;l<nf; l++) {
+						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
+					}
+				}
+			}
+		}
+		yf_list=PROTECT(NEW_LIST(2));
+		SET_VECTOR_ELT(yf_list,0,Y);
+		SET_VECTOR_ELT(yf_list,1,F);
+		set_names(yf_list,yf_names,2);
+		SET_VECTOR_ELT(res_list,i,yf_list);
+		free(p);
+		event_free(&ev);
+		gsl_odeiv2_driver_free(driver);
+		UNPROTECT(2);
+		if (observable) UNPROTECT(1);
+	}
+	UNPROTECT(1);
+	return res_list;
+}
+
+/* Like `r_gsl_odeiv2_outer` but parallel in p. This function
+	 simulates the model for each entry in a list of named items, each
+	 describing a single initial value problem (`y0`, `t`, parameters `p`, events).
+	 ```
+	 y'=f(y,t;p) y0=y(t[0])
+	 ```
+	 This version of the function is OpenMP parallel over p, rather than the experiments.
+*/
+Rdata /* the trajectories as a list (same size as experiments) */
+r_gsl_odeiv2_outer2(
  Rdata model_name, /* a string */
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters) /* a matrix of parameterization columns*/
@@ -672,72 +740,64 @@ r_gsl_odeiv2_outer(
 	double *p, *f;
 	jacp dfdp=NULL;
 	func observable=NULL;
-	double fsum;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
 
-#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
 	for (i=0;i<N;i++){
-		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-		p=malloc(sizeof(double)*(np+nu));
 #ifdef DEBUG_PRINT
 		printf("[%s] solving %i of %i.\n",__func__,i,N);
 #endif
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
-		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
-		if (observable)
-			nf=observable(0,NULL,NULL,NULL);
-		if (nu)
-			memcpy(p+np,REAL(input),nu*sizeof(double));
 		ny=length(iv);
 		nt=length(t);
 		assert(ny>0 && nt>0 && ny==sys.dimension);
 		initial_value=gsl_vector_view_array(REAL(iv),ny);
 		time=gsl_vector_view_array(REAL(t),nt);
-		assert(sys.params);
 		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
-		if (observable)
+		if (observable){
+			nf=observable(0,NULL,NULL,NULL);
 			F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+		}
+#pragma omp parallel for private(driver,j,l,y,f,p,ev) firstprivate(nf,ny,nt,M,F,Y,sys,time,initial_value)
 		for (k=0;k<M;k++){
+			driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+			ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 			y=gsl_matrix_view_array(REAL(Y)+(nt*ny*k),nt,ny);
-			assert((y.matrix).data);
+			p=malloc(sizeof(double)*(np+nu));
+			if (nu>0)
+				memcpy(p+np,REAL(input),nu*sizeof(double));
 			memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
 			sys.params = p;
 			assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
 #ifdef DEBUG_PRINT
 			printf("[%s] done.\n",__func__);
 #endif
-			assert(status==GSL_SUCCESS);
 			if (observable) {
 #ifdef DEBUG_PRINT
 				printf("calculating %li functions:",nf);
 #endif
-				fsum=0;
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
 					assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
 					for (l=0;l<nf; l++) {
 						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
-						fsum+=f[l];
 					}
 				}
-#ifdef DEBUG_PRINT
-				printf("sum(func)=%g\n",fsum);
-#endif
 			}
+			free(p);
+			event_free(&ev);
+			gsl_odeiv2_driver_free(driver);
 		}
 		yf_list=PROTECT(NEW_LIST(2));
 		SET_VECTOR_ELT(yf_list,0,Y);
 		SET_VECTOR_ELT(yf_list,1,F);
 		set_names(yf_list,yf_names,2);
 		SET_VECTOR_ELT(res_list,i,yf_list);
-
-		gsl_odeiv2_driver_free(driver);
 		UNPROTECT(2);
 		if (observable) UNPROTECT(1);
 	}
