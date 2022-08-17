@@ -563,7 +563,7 @@ r_gsl_odeiv2_simulate(
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
-#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,j,k,field_names) firstprivate(sys,yf_names,observable)
+#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,j,k,field_names,nf,nt,ny) firstprivate(sys,yf_names,observable)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 #ifdef DEBUG_PRINT
@@ -612,14 +612,7 @@ r_gsl_odeiv2_simulate(
 			fsum=0;
 			for (j=0;j<nt;j++){
 				f=&(REAL(F)[j*nf]);
-				assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
-				for (k=0;k<ny; k++){
-					printf("[%s] y[%i](t%i) = %g\n",__func__,k,j,gsl_matrix_get(&(y.matrix),j,k));
-				}
-				for (k=0;k<nf; k++){
-					printf("[%s] f[%i](t%i) = %g\n",__func__,k,j,f[k]);
-					fsum+=f[k];
-				}
+				observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 			}
 #ifdef DEBUG_PRINT
 			printf("sum(func)=%g\n",fsum);
@@ -691,7 +684,7 @@ r_gsl_odeiv2_outer(
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
 
-#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p,j,k,l) firstprivate(sys,res_list,yf_names)
+#pragma omp parallel for private(driver,y,ev,iv,t,Y,F,f,fsum,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		p=malloc(sizeof(double)*(np+nu));

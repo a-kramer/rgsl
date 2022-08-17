@@ -121,26 +121,25 @@ int HarmonicOscillator_jacp(double t, const double y_[], double *jacp_, void *pa
  */
 int HarmonicOscillator_func(double t, const double y_[], double *f, void *params)
 {
-    double v, y;
-    double k, c, F;
-    double v_flux;
-    double *p_ = params;
-    int RET=GSL_SUCCESS;
-    if (f){
-      v          = y_[0];
-      y          = y_[1];
+	double v, y;
+	double k, c, F;
+	double v_flux;
+	double *p_ = params;
+	if (!f){
+		fprintf(stderr,"[%s] called with no args, returning length of f\n",__func__);
+		fflush(stderr);
+		return 1;
+	}
+	v          = y_[0];
+	y          = y_[1];
+	k          = p_[0];
+	c          = p_[1];
+	F          = p_[2];
 
-      k          = p_[0];
-      c          = p_[1];
-      F          = p_[2];
+	v_flux = -k*y+F-v*c;
 
-      v_flux = -k*y+F-v*c;
-
-      f[0] = sqrt(y*y+v*v);
-      fprintf(stderr,"[%s] sqrt((%g)^2 + (%g)^2) = %g\n",__func__,y,v,f[0]);  fflush(stderr);
-    } else {
-      fprintf(stderr,"[%s] called with no args, returning length of f\n",__func__);  fflush(stderr);
-      RET=1;
-    }
-    return RET;
+	f[0] = sqrt(y*y+v*v);
+	//fprintf(stderr,"[%s] sqrt((%g)^2 + (%g)^2) = %g\n",__func__,y,v,f[0]);
+	//fflush(stderr);
+	return GSL_SUCCESS;
 }
