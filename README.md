@@ -127,14 +127,14 @@ experiments[[1]][["time"]] <- seq(0,1,length.out=100)
 experiments[[1]][["initial_value"]] <- c(0,0,0)
 experiments[[1]][["parameters"]] <- c(1,2,3,4,5)
 ```
-The entries are found by their name, so they naming is not arbitrary:
+The entries are found by their name, so they naming is not arbitrary (but there are some alternative spellings):
 
 | name | optional | meaning |
 |-----:|:-------: |:--------|
-| `time` | no | output time |
-| `initial_value` | no | a state space vector `y(t=t0)` |
-| `parameters` | no | a numeric vector of parameters |
-| `events` | yes | an event description for this run |
+| `time`,`outputTimes`| no | output time |
+| `initial_value`,`initialState` | no | a state space vector `y(t=t0)` |
+| `parameters`,`param`,`par` | no | a numeric vector of parameters |
+| `events`,`scheduledEvents` | yes | an event description for this run |
 
 The simulation experiments will be done in parallel.  This interface
 is useful whenever your problem lends itself to this description.
