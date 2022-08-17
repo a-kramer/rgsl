@@ -4,7 +4,7 @@
 \alias{r_gsl_odeiv2}
 \title{Initial Value Problem solution in C}
 \usage{
-r_gsl_odeiv2(name, t, y0, p)
+r_gsl_odeiv2(name, t, y0, p, events = NULL)
 }
 \arguments{
 \item{t}{a vector of time values for the desired output}

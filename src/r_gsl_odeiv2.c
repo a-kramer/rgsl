@@ -47,17 +47,18 @@ typedef struct {
 	affine_tf *par;
 } event_t;
 
-int in_list(Rdata names, const char *name){
+/* finds named item in List, `name` can be a space separated list of possible names */
+int in_list(Rdata List, const char *name){
 	assert(isVector(List));
 	int i;
-	int N=length(names);
+	int N=length(List);
 	int l=strlen(name);
 	char *str=malloc(l+1);
 	*(((char*) memcpy(str,name,l))+l)='\0';
 	char *t=strtok(str," ");
 	while (t){
 		for (i=0;i<N;i++){
-			if (strcmp(CHAR(STRING_ELT(names,i)),t) == MATCH){
+			if (strcmp(CHAR(STRING_ELT(List,i)),t) == MATCH){
 				free(str);
 				return i;
 			}
@@ -277,17 +278,16 @@ load_system(
 	char *symbol_name; // symbol name in .so
 	if (lib){
 		symbol_name=model_function(model_name,"_vf");
-		f=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+		f=(vf) load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		symbol_name=model_function(model_name,"_jac");
 		dfdy=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		if (dfdp){
 			symbol_name=model_function(model_name,"_jacp");
-			*dfdp=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+			*dfdp=(jacp) load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		}
-
 		symbol_name=model_function(model_name,"_func");
 		if (symbol_name && F){
-			*F=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+			*F= (func) load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 	} else {
 		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,so,dlerror());
@@ -347,7 +347,6 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	gsl_vector_view Yout_row;
 	int i=0,j;
 	double t,tf,te;
-	double dfdt[ny];
 	int status;
 	/* initialize time-point 0 values */
 	t=gsl_vector_get(time,0);
@@ -441,8 +440,8 @@ r_gsl_odeiv2(
 #endif
 
 	// check whether events are happening during integration:
-	int l,lt;
-	Rdata event_names,E;
+	int l;
+	Rdata event_names;
 	event_t **ev=calloc(N,sizeof(event_t*));
 	if (event && event != R_NilValue){
 		l=length(event);
@@ -515,7 +514,7 @@ r_gsl_odeiv2_simulate(
  Rdata model_name, /* a string */
  Rdata experiments) /* a list of simulation experiments */
 {
-	int i,j,k;
+	int i,j;
 	double *f, abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	assert(IS_CHARACTER(model_name));
 	assert(IS_LIST(experiments));
@@ -527,9 +526,9 @@ r_gsl_odeiv2_simulate(
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
+	SET_NAMES(res_list,GET_NAMES(experiments));
 	const char *yf_names[2]={"state","func"};
-	Rdata iv, t, field_names, F, Y, yf_list;
-	Rdata experiment_names=GET_NAMES(experiments);
+	Rdata iv, t, F, Y, yf_list;
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf;
@@ -540,7 +539,7 @@ r_gsl_odeiv2_simulate(
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
-#pragma omp parallel for private(driver,y,ev,iv,t,time,initial_value,Y,F,f,yf_list,j,k,field_names,nf,nt,ny) firstprivate(sys,yf_names,observable)
+#pragma omp parallel for private(driver,y,ev,iv,t,time,initial_value,Y,F,f,yf_list,j,nf,nt,ny) firstprivate(sys,yf_names,observable)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 #ifdef DEBUG_PRINT
@@ -625,12 +624,12 @@ r_gsl_odeiv2_outer(
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
-	Rdata yf_list, input, Y, F, iv, t, field_names;
+	SET_NAMES(res_list,GET_NAMES(experiments));
+	Rdata yf_list, input, Y, F, iv, t;
 	const char *yf_names[2]={"state","func"};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf, nu;
-	Rdata experiment_names=GET_NAMES(experiments);
 	event_t *ev=NULL;
 	double *p, *f;
 	jacp dfdp=NULL;
@@ -730,12 +729,12 @@ r_gsl_odeiv2_outer2(
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
-	Rdata yf_list, input, Y, F, iv, t, field_names;
+	SET_NAMES(res_list,GET_NAMES(experiments));
+	Rdata yf_list, input, Y, F, iv, t;
 	const char *yf_names[2]={"state","func"};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf, nu;
-	Rdata experiment_names=GET_NAMES(experiments);
 	event_t *ev;
 	double *p, *f;
 	jacp dfdp=NULL;

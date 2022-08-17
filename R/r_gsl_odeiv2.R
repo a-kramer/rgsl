@@ -98,7 +98,7 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 #' @param p a matrix of parameters with M columns
 #' @return the solution trajectories y(t;p) for all experiments
 #' @keywords ODE
-#' @useDynLib rgsl, odeiv_outer=r_gsl_odeiv2_outer
+#' @useDynLib rgsl, odeiv_outer_e=r_gsl_odeiv2_outer, odeiv_outer_p=r_gsl_odeiv2_outer2
 #' @export
 #' @examples
 #' y0 <- c(0,1)
@@ -107,10 +107,14 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 #' e <- list(time=t,input=u,initial_value=y0)
 #' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
 r_gsl_odeiv2_outer <- function(name,experiments,p){
-    so <- paste0(name,".so")
-    stopifnot(file.exists(so))
-    stopifnot(is.matrix(p))
-    y <- .Call(odeiv_outer,name,experiments,p)
-    return(y)
+	so <- paste0(name,".so")
+	stopifnot(file.exists(so))
+	stopifnot(is.matrix(p))
+	if (dim(p)[2]>length(experiments)){
+		y <- .Call(odeiv_outer_p,name,experiments,p)
+	} else {
+		y <- .Call(odeiv_outer_e,name,experiments,p)
+	}
+	return(y)
 }
 
