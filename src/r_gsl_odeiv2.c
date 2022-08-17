@@ -626,9 +626,10 @@ r_gsl_odeiv2_simulate(
 		SET_VECTOR_ELT(res_list,i,yf_list);
 
 		gsl_odeiv2_driver_free(driver);
+		UNPROTECT(2);
+		if (observable) UNPROTECT(1);
 	}
-	//UNPROTECT(4*N);
-	//UNPROTECT(1);
+	UNPROTECT(1);
 	return res_list;
 }
 
@@ -646,11 +647,12 @@ r_gsl_odeiv2_outer(
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters) /* a matrix of parameterization columns*/
 {
-	int i,j,k,l;
-	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	assert(IS_CHARACTER(model_name));
 	assert(IS_LIST(experiments));
 	assert(IS_NUMERIC(parameters));
+
+	int i,j,k,l;
+	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	int N=GET_LENGTH(experiments);
 	size_t np=nrows(parameters);
 	size_t M=ncols(parameters);
@@ -660,24 +662,16 @@ r_gsl_odeiv2_outer(
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
-	Rdata yf_list;
-	Rdata input;
+	Rdata yf_list, input, Y, F, iv, t, field_names;
 	const char *yf_names[2]={"state","func"};
-	Rdata Y;
-	Rdata iv, t;
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf, nu;
-	int status;
 	Rdata experiment_names=GET_NAMES(experiments);
-	Rdata field_names;
 	event_t *ev;
-
-	double *p;
+	double *p, *f;
 	jacp dfdp=NULL;
 	func observable=NULL;
-	Rdata F;
-	double *f;
 	double fsum;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
 #ifdef DEBUG_PRINT
@@ -691,62 +685,49 @@ r_gsl_odeiv2_outer(
 #ifdef DEBUG_PRINT
 		printf("[%s] solving %i of %i.\n",__func__,i,N);
 #endif
-
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
-		if (nu) memcpy(p+np,REAL(input),nu*sizeof(double));
-
+		if (observable)
+			nf=observable(0,NULL,NULL,NULL);
+		if (nu)
+			memcpy(p+np,REAL(input),nu*sizeof(double));
 		ny=length(iv);
 		nt=length(t);
 		assert(ny>0 && nt>0 && ny==sys.dimension);
-
 		initial_value=gsl_vector_view_array(REAL(iv),ny);
 		time=gsl_vector_view_array(REAL(t),nt);
-
 		assert(sys.params);
-
 		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
-		F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+		if (observable)
+			F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
 		for (k=0;k<M;k++){
 			y=gsl_matrix_view_array(REAL(Y)+(nt*ny*k),nt,ny);
 			assert((y.matrix).data);
 			memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
 			sys.params = p;
-			status=simulate_timeseries(
-              sys,
-              driver,
-              &(initial_value.vector),
-              &(time.vector),
-              ev,
-              &(y.matrix)
-             );
+			assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
 #ifdef DEBUG_PRINT
 			printf("[%s] done.\n",__func__);
 #endif
 			assert(status==GSL_SUCCESS);
 			if (observable) {
 #ifdef DEBUG_PRINT
-	printf("model functions exist.\n");
+				printf("calculating %li functions:",nf);
 #endif
-
-	nf=observable(0,NULL,NULL,NULL);
+				fsum=0;
+				for (j=0;j<nt;j++){
+					f=REAL(F)+(0+j*nf+k*nf*nt);
+					assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+					for (l=0;l<nf; l++) {
+						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
+						fsum+=f[l];
+					}
+				}
 #ifdef DEBUG_PRINT
-	printf("calculating %li functions:",nf);
-#endif
-	fsum=0;
-	for (j=0;j<nt;j++){
-		f=REAL(F)+(0+j*nf+k*nf*nt);
-		assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
-		for (l=0;l<nf; l++) {
-			printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
-			fsum+=f[l];
-		}
-	}
-#ifdef DEBUG_PRINT
-	printf("sum(func)=%g\n",fsum);
+				printf("sum(func)=%g\n",fsum);
 #endif
 			}
 		}
@@ -757,8 +738,9 @@ r_gsl_odeiv2_outer(
 		SET_VECTOR_ELT(res_list,i,yf_list);
 
 		gsl_odeiv2_driver_free(driver);
+		UNPROTECT(2);
+		if (observable) UNPROTECT(1);
 	}
-	UNPROTECT(4*N);
 	UNPROTECT(1);
 	return res_list;
 }
