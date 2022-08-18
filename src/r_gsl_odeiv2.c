@@ -485,7 +485,9 @@ r_gsl_odeiv2(
 			 &(y.matrix));
 		assert(status==GSL_SUCCESS);
 		gsl_odeiv2_driver_free(driver);
+		event_free(&(ev[i]));
 	}
+	free(ev);
 	UNPROTECT(1);
 	return Y;
 }
@@ -514,7 +516,7 @@ r_gsl_odeiv2_simulate(
  Rdata model_name, /* a string */
  Rdata experiments) /* a list of simulation experiments */
 {
-	int i,j;
+	int i,j,status;
 	double *f, abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	assert(IS_CHARACTER(model_name));
 	assert(IS_LIST(experiments));
@@ -552,7 +554,6 @@ r_gsl_odeiv2_simulate(
 		ny=length(iv);
 		nt=length(t);
 		assert(ny>0 && nt>0 && ny==sys.dimension);
-
 		initial_value=gsl_vector_view_array(REAL(iv),ny);
 		time=gsl_vector_view_array(REAL(t),nt);
 		sys.params = REAL(from_list(VECTOR_ELT(experiments,i),"parameters param par"));
@@ -565,7 +566,8 @@ r_gsl_odeiv2_simulate(
 			nf=observable(0,NULL,NULL,NULL);
 			F=PROTECT(allocMatrix(REALSXP,nf,nt));
 		}
-		assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
+		status=simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix));
+		assert(status==GSL_SUCCESS);
 #ifdef DEBUG_PRINT
 		printf("[%s] done.\n",__func__);
 #endif
@@ -576,7 +578,7 @@ r_gsl_odeiv2_simulate(
 #endif
 			for (j=0;j<nt;j++){
 				f=&(REAL(F)[j*nf]);
-				assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+				observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 			}
 		}
 		yf_list=PROTECT(NEW_LIST(2));
@@ -613,7 +615,7 @@ r_gsl_odeiv2_outer(
 	assert(IS_LIST(experiments));
 	assert(IS_NUMERIC(parameters));
 
-	int i,j,k,l;
+	int i,j,k,l,status;
 	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	int N=GET_LENGTH(experiments);
 	size_t np=nrows(parameters);
@@ -668,7 +670,8 @@ r_gsl_odeiv2_outer(
 			assert((y.matrix).data);
 			memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
 			sys.params = p;
-			assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
+			status=simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix));
+			assert(status==GSL_SUCCESS);
 #ifdef DEBUG_PRINT
 			printf("[%s] done.\n",__func__);
 #endif
@@ -678,7 +681,8 @@ r_gsl_odeiv2_outer(
 #endif
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
-					assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+					assert(status==GSL_SUCCESS);
 					for (l=0;l<nf; l++) {
 						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
 					}
@@ -718,7 +722,7 @@ r_gsl_odeiv2_outer2(
 	assert(IS_LIST(experiments));
 	assert(IS_NUMERIC(parameters));
 
-	int i,j,k,l;
+	int i,j,k,l,status;
 	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	int N=GET_LENGTH(experiments);
 	size_t np=nrows(parameters);
@@ -772,7 +776,8 @@ r_gsl_odeiv2_outer2(
 				memcpy(p+np,REAL(input),nu*sizeof(double));
 			memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
 			sys.params = p;
-			assert(simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix))==GSL_SUCCESS);
+			status=simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix));
+			assert(status==GSL_SUCCESS);
 #ifdef DEBUG_PRINT
 			printf("[%s] done.\n",__func__);
 #endif
@@ -782,7 +787,8 @@ r_gsl_odeiv2_outer2(
 #endif
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
-					assert(observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params)==GSL_SUCCESS);
+					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+					assert(status==GSL_SUCCESS);
 					for (l=0;l<nf; l++) {
 						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
 					}

@@ -105,7 +105,7 @@ test.experiments <-function(){
 	## 2-dim and 3-dim identity matrix
 	I3 <- diag(1,3,3)
 	I2 <- diag(1,2,2)
-	N <- 3
+	N <- 4
 	event.t <- c(1.0,2.0,3.0)
 
 	state.tf <- transform(length(event.t),I2,c(1,0))
@@ -119,7 +119,9 @@ test.experiments <-function(){
 	param.tf <- transform(length(event.t),I3,c(0,0.2,0))
 	medium.friction <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
-	experiments=list(a=no.friction,b=low.friction,c=medium.friction)
+	medium.friction.no.events <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1))
+
+	experiments=list(a=no.friction,b=low.friction,c=medium.friction,d=medium.friction.no.events)
 	if (require("rgsl")){
 		y <- r_gsl_odeiv2_sim(name,experiments)
 		plot(t,y[[1]][["state"]][2,],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
