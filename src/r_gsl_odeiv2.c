@@ -88,6 +88,7 @@ affine_transformation(
  Rdata A,/*a series of matrices, possibly just a set of diagonals*/
  Rdata b)/*a series of offsets*/
 {
+	if (A == R_NilValue) return NULL;
 	assert(IS_NUMERIC(A));
 	assert(IS_NUMERIC(b));
 	Rdata dA=GET_DIM(A);
@@ -141,9 +142,11 @@ apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vecto
 	 double *z,/* an array of size n, it is updated using L */
 	 int t_index)/* if A and b are each a series of matrices, pick the i-th */
 {
-	assert(L);
-	assert(z);
-	assert(t_index >=0 && L->l > 0);
+	if (!L) return GSL_SUCCESS; /* nothing to be done */
+	if (!z || !(t_index >=0 && L->l > 0)) {
+		fprintf(stderr,"[%s] (%p) z must be a pointer to a double array. t_index must be a valid index (0<=%i<%i), L must be applicable to z\n",__func__,z,t_index,L->l);
+		return GSL_EINVAL;
+	}
 	int n=L->length_b;
 	int i=t_index % (L->l);
 	int status=GSL_SUCCESS;
@@ -184,7 +187,7 @@ event_t* event_from_R(Rdata E){
 	if (tf == R_NilValue) return NULL;
 	Rdata state_tf=from_list(tf,"state");
 	Rdata param_tf=from_list(tf,"param");
-	if (state_tf == R_NilValue || param_tf == R_NilValue) return NULL;
+	//if (state_tf == R_NilValue || param_tf == R_NilValue) return NULL;
 	event->state=affine_transformation(from_list(state_tf,"A"),from_list(state_tf,"b"));
 	event->par=affine_transformation(from_list(param_tf,"A"),from_list(param_tf,"b"));
 
@@ -221,7 +224,6 @@ model_function(const char *model_name, /* the base name of the model */
 	size_t size=(strlen(model_name)+strlen(suffix)+1);
 	assert(size);
 	char *f=malloc(sizeof(char)*size);
-	assert(f);
 	strcat(strcpy(f,model_name),suffix);
 #ifdef DEBUG_PRINT
 	fprintf(stderr,"[%s] «%s»\n",__func__,f); fflush(stderr);
@@ -234,7 +236,7 @@ model_function(const char *model_name, /* the base name of the model */
 	 fails to find the file `abort()` is called. Optionally, this
 	 function frees the storage assosiated with the name of the
 	 function.*/
-void *load_or_exit(void *lib, /* file pointer, previously opened via `dlopen()` */
+void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` */
  char *name, /* function to be loaded from file */
  int opt) /* whether to call `free()` on `name` (either: `KEEP_ON_SUCCESS` or `FREE_ON_SUCCESS`). */
 {
@@ -248,7 +250,7 @@ void *load_or_exit(void *lib, /* file pointer, previously opened via `dlopen()` 
 			free(name);
 		}
 	}else{
-		fprintf(stderr,"[%s] %s\n",__func__,dlerror());
+		fprintf(stderr,"[%s] loading of «%s» failed: slerror was «%s»\n",__func__,name,dlerror());
 		/*abort();*/
 	}
 	return symbol;
@@ -263,7 +265,7 @@ void *load_or_exit(void *lib, /* file pointer, previously opened via `dlopen()` 
 gsl_odeiv2_system /* the system structure, see gsl documentation. */
 load_system(
  const char *model_name, /* the file-name will be constructed from this name, possibly from @link first_so@ */
- size_t n, /* number of state variables */
+ size_t n, /* number of state variables, 0 for auto-detection */
  double *p, /* default parameter vector */
  jacp *dfdp,/*[out] additional return value: a pointer to the parameter derivative (matrix) function.*/
  func *F) /* [out] observables for this model (output functions) */
@@ -273,28 +275,32 @@ load_system(
 	void *lib=dlopen(local_so,RTLD_LAZY);
 	free(local_so);
 	void *dfdy;
+	gsl_odeiv2_system sys={NULL,NULL,0,NULL};
 	vf f;
 	//dfdp=malloc(sizeof(jacp*));
 	char *symbol_name; // symbol name in .so
 	if (lib){
 		symbol_name=model_function(model_name,"_vf");
-		f=(vf) load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+		f=(vf) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		symbol_name=model_function(model_name,"_jac");
-		dfdy=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+		dfdy=load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		if (dfdp){
 			symbol_name=model_function(model_name,"_jacp");
-			*dfdp=(jacp) load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+			*dfdp=(jacp) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 		symbol_name=model_function(model_name,"_func");
 		if (symbol_name && F){
-			*F= (func) load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+			*F= (func) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 	} else {
 		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,so,dlerror());
-		abort();
+		return sys;
 	}
 	if (!n) n=f(0,NULL,NULL,NULL);
-	gsl_odeiv2_system sys={f,dfdy,n,p};
+	sys.function=f;
+	sys.jacobian=dfdy;
+	sys.dimension=n;
+	sys.params=p;
 	free(so);
 #ifdef DEBUG_PRINT
 	fprintf(stderr,"[%s] ode system created.\n",__func__); fflush(stderr);
@@ -435,6 +441,7 @@ r_gsl_odeiv2(
 	// load system from file
 	jacp dfdp;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), ny, REAL(p), &dfdp, NULL);
+	if (sys.dimension == 0) return R_NilValue;
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
@@ -538,6 +545,7 @@ r_gsl_odeiv2_simulate(
 	jacp dfdp=NULL;
 	func observable=NULL;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+	if (sys.dimension == 0) return R_NilValue;
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
@@ -637,6 +645,7 @@ r_gsl_odeiv2_outer(
 	jacp dfdp=NULL;
 	func observable=NULL;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+	if (sys.dimension == 0) return R_NilValue;
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
@@ -744,6 +753,7 @@ r_gsl_odeiv2_outer2(
 	jacp dfdp=NULL;
 	func observable=NULL;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable);
+	if (sys.dimension == 0) return R_NilValue;
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
