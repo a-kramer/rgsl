@@ -89,8 +89,7 @@ affine_transformation(
  Rdata b)/*a series of offsets*/
 {
 	if (A == R_NilValue) return NULL;
-	assert(IS_NUMERIC(A));
-	assert(IS_NUMERIC(b));
+
 	Rdata dA=GET_DIM(A);
 	Rdata db=GET_DIM(b);
 	assert(length(dA)==length(db));
@@ -136,7 +135,7 @@ void free_tf(affine_tf *L){
 	 assume that A and b and z in the input are all of sufficient size:
 	 n×n for matrices and n for vectors. A can be n-sized as well, if A
 	 is a diagonal matrix, then we only store the diagonal. n is stored
-	 in the transformation structure as length_b.	*/
+	 in the transformation structure as length_b. */
 int /* the returned status of the gsl operations */
 apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vectors here*/
 	 double *z,/* an array of size n, it is updated using L */
@@ -187,7 +186,7 @@ event_t* event_from_R(Rdata E){
 	if (tf == R_NilValue) return NULL;
 	Rdata state_tf=from_list(tf,"state");
 	Rdata param_tf=from_list(tf,"param");
-	//if (state_tf == R_NilValue || param_tf == R_NilValue) return NULL;
+
 	event->state=affine_transformation(from_list(state_tf,"A"),from_list(state_tf,"b"));
 	event->par=affine_transformation(from_list(param_tf,"A"),from_list(param_tf,"b"));
 
@@ -240,7 +239,7 @@ void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` 
  char *name, /* function to be loaded from file */
  int opt) /* whether to call `free()` on `name` (either: `KEEP_ON_SUCCESS` or `FREE_ON_SUCCESS`). */
 {
-	assert(lib && name);
+  if (!lib || !name) return NULL;
 	void *symbol=dlsym(lib,name);
 	if (symbol) {
 #ifdef DEBUG_PRINT
@@ -251,7 +250,7 @@ void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` 
 		}
 	}else{
 		fprintf(stderr,"[%s] loading of «%s» failed: slerror was «%s»\n",__func__,name,dlerror());
-		/*abort();*/
+		return NULL;
 	}
 	return symbol;
 }
@@ -286,11 +285,11 @@ load_system(
 		dfdy=load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		if (dfdp){
 			symbol_name=model_function(model_name,"_jacp");
-			*dfdp=(jacp) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
+			*dfdp = (jacp) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 		symbol_name=model_function(model_name,"_func");
 		if (symbol_name && F){
-			*F= (func) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
+			*F = (func) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 	} else {
 		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,so,dlerror());
@@ -407,10 +406,6 @@ r_gsl_odeiv2(
  Rdata p, /* parameter matrix */
  Rdata event) /* list of events */
 {
-	assert(IS_CHARACTER(model_name));
-	assert(IS_NUMERIC(tspan));
-	assert(IS_NUMERIC(y0));
-	assert(IS_NUMERIC(p));
 	int i,j;
 	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	size_t nt=length(tspan);
@@ -505,7 +500,7 @@ void set_names(Rdata list, const char *names[], size_t n)
 	int i;
 	Rdata rnames=PROTECT(NEW_CHARACTER(n));
 	for (i=0;i<n;i++){
-	 SET_STRING_ELT(rnames,i,mkChar(names[i]));
+		SET_STRING_ELT(rnames,i,mkChar(names[i]));
 	}
 	SET_NAMES(list,rnames);
 	UNPROTECT(1);
@@ -525,8 +520,6 @@ r_gsl_odeiv2_simulate(
 {
 	int i,j,status;
 	double *f, abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
-	assert(IS_CHARACTER(model_name));
-	assert(IS_LIST(experiments));
 
 	int N=GET_LENGTH(experiments);
 #ifdef DEBUG_PRINT
@@ -619,10 +612,6 @@ r_gsl_odeiv2_outer(
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters) /* a matrix of parameterization columns*/
 {
-	assert(IS_CHARACTER(model_name));
-	assert(IS_LIST(experiments));
-	assert(IS_NUMERIC(parameters));
-
 	int i,j,k,l,status;
 	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	int N=GET_LENGTH(experiments);
@@ -727,10 +716,6 @@ r_gsl_odeiv2_outer2(
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters) /* a matrix of parameterization columns*/
 {
-	assert(IS_CHARACTER(model_name));
-	assert(IS_LIST(experiments));
-	assert(IS_NUMERIC(parameters));
-
 	int i,j,k,l,status;
 	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	int N=GET_LENGTH(experiments);
