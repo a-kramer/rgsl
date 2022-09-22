@@ -296,6 +296,9 @@ load_system(
 		return sys;
 	}
 	if (!n) n=f(0,NULL,NULL,NULL);
+#ifdef DEBUG_PRINT
+	fprintf(stderr,"[%s] output function returns %li components.\n",__func__,n);
+#endif
 	sys.function=f;
 	sys.jacobian=dfdy;
 	sys.dimension=n;
@@ -637,6 +640,7 @@ r_gsl_odeiv2_outer(
 	if (sys.dimension == 0) return R_NilValue;
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
+	fflush(stdout);
 #endif
 
 #pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
@@ -648,6 +652,7 @@ r_gsl_odeiv2_outer(
 #endif
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
+		if (!ISREAL(t)) break;
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
@@ -723,6 +728,7 @@ r_gsl_odeiv2_outer2(
 	size_t M=ncols(parameters);
 #ifdef DEBUG_PRINT
 	printf("[%s] simulating %i experiment, with %li parameter sets each\n",__func__,N,M);
+	fflush(stdout);
 #endif
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
@@ -783,7 +789,6 @@ r_gsl_odeiv2_outer2(
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
 					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
-					assert(status==GSL_SUCCESS);
 					for (l=0;l<nf; l++) {
 						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
 					}
