@@ -652,7 +652,6 @@ r_gsl_odeiv2_outer(
 #endif
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
-		if (!ISREAL(t)) break;
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
@@ -684,11 +683,7 @@ r_gsl_odeiv2_outer(
 #endif
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
-					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
-					assert(status==GSL_SUCCESS);
-					for (l=0;l<nf; l++) {
-						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
-					}
+					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
 			}
 		}
