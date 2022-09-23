@@ -681,11 +681,7 @@ r_gsl_odeiv2_outer(
 #endif
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
-					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
-					assert(status==GSL_SUCCESS);
-					for (l=0;l<nf; l++) {
-						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
-					}
+					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
 			}
 		}
@@ -787,11 +783,7 @@ r_gsl_odeiv2_outer2(
 #endif
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
-					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
-					assert(status==GSL_SUCCESS);
-					for (l=0;l<nf; l++) {
-						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
-					}
+					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
 			}
 			free(p);
