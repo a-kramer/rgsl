@@ -125,11 +125,7 @@ int HarmonicOscillator_func(double t, const double y_[], double *f, void *params
 	double k, c, F;
 	double v_flux;
 	double *p_ = params;
-	if (!f){
-		fprintf(stderr,"[%s] called with no args, returning length of f\n",__func__);
-		fflush(stderr);
-		return 1;
-	}
+	if (!f || !y_ || !p_)	return 1;
 	v          = y_[0];
 	y          = y_[1];
 	k          = p_[0];

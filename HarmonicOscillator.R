@@ -137,7 +137,7 @@ test.experiments <-function(){
 
 test.experiments2 <-function(){
 	name <- "HarmonicOscillator"
-	t <- seq(0,13,length.out=120)
+	t <- as.double(seq(0,13,length.out=120))
 	## 2-dim and 3-dim identity matrix
 	I3 <- diag(1,3,3)
 	I2 <- diag(1,2,2)

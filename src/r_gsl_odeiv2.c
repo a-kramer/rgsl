@@ -110,12 +110,12 @@ affine_transformation(
 	} else if (dim[1] == 1) {
 		L->type=DIAG;
 	} else {
-		printf("[%s] A and b have weird dimensionality: A is ",__func__);
+		fprintf(stderr,"[%s] A and b have weird dimensionality: A is ",__func__);
 		for (j=0;j<n;j++) printf("%i%s",dim[j],j==n-1?"×":" ");
-		printf(" and b is ");
+		fprintf(stderr," and b is ");
 		for (j=0;j<n;j++) printf("%i%s",dim_b[j],j==n-1?"×":" ");
-		printf("\nThey should be both three dimensional.\n");
-		abort();
+		fprintf(stderr,"\nThey should be both three dimensional.\n");
+		return NULL;
 	}
 	L->A=REAL(A);
 	L->b=REAL(b);
@@ -171,11 +171,12 @@ apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vecto
 		break;
 	default:
 		fprintf(stderr,"[%s] unknown transformation type %i.\n",__func__,L->type);
-		abort();
+		return GSL_EINVAL;
 	}
-	assert(status==GSL_SUCCESS);
-	gsl_vector_add(L->y,&(b.vector));
-	gsl_vector_memcpy(&(x.vector),L->y);
+	if (status==GSL_SUCCESS){
+		gsl_vector_add(L->y,&(b.vector));
+		gsl_vector_memcpy(&(x.vector),L->y);
+	}
 	return status;
 }
 
@@ -219,13 +220,13 @@ char* /* string with model_name and suffix (free after loading the function) */
 model_function(const char *model_name, /* the base name of the model */
  const char *suffix) /* suffix, usually `"_vf"` or `"_jac"` */
 {
-	assert(model_name);
+	if (!model_name) return NULL;
 	size_t size=(strlen(model_name)+strlen(suffix)+1);
 	assert(size);
 	char *f=malloc(sizeof(char)*size);
 	strcat(strcpy(f,model_name),suffix);
 #ifdef DEBUG_PRINT
-	fprintf(stderr,"[%s] «%s»\n",__func__,f); fflush(stderr);
+	printf(stdout,"[%s] «%s»\n",__func__,f); fflush(stderr);
 #endif
 	return f;
 }
@@ -376,15 +377,12 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 			assert(status==GSL_SUCCESS);
 			i++;
 		}
-		//printf("[%s] t=%f -> %f\n",__func__,t,tf);
 		status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
 		//report any error codes to the R user
 		check_status(status,t,tf,j);
 		if(status==GSL_SUCCESS){
 			Yout_row = gsl_matrix_row(Yout,j);
 			gsl_vector_memcpy(&(Yout_row.vector),y);
-		} else {
-			break;
 		}
 	}
 	gsl_odeiv2_driver_reset(driver);
@@ -784,9 +782,6 @@ r_gsl_odeiv2_outer2(
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
 					status=observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
-					for (l=0;l<nf; l++) {
-						printf("[%s] f[%i](t%i) = %g\n",__func__,l,j,f[l]);
-					}
 				}
 			}
 			free(p);
