@@ -89,7 +89,7 @@ affine_transformation(
  Rdata A,/*a series of matrices, possibly just a set of diagonals*/
  Rdata b)/*a series of offsets*/
 {
-	if (A == R_NilValue) return NULL;
+	if (A == R_NilValue || b == R_NilValue) return NULL;
 
 	Rdata dA=GET_DIM(A);
 	Rdata db=GET_DIM(b);
@@ -98,7 +98,7 @@ affine_transformation(
 	int *dim=INTEGER(dA);
 	int *dim_b=INTEGER(db);
 	int j;
-	assert(dim[0] == dim_b[0]);
+	if (dim[0] != dim_b[0]) return NULL;
 	affine_tf *L=malloc(sizeof(affine_tf));
 	if (n==3) {
 		L->l=dim[2];
@@ -183,16 +183,15 @@ apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vecto
 
 event_t* event_from_R(Rdata E){
 	int j;
-	event_t *event=malloc(sizeof(event_t));
 	Rdata tf=from_list(E,"tf");
-	if (tf == R_NilValue) return NULL;
+	Rdata time = from_list(E,"time");
+	if (tf == R_NilValue || time == R_NilValue) return NULL;
 	Rdata state_tf=from_list(tf,"state");
 	Rdata param_tf=from_list(tf,"param");
-
+	event_t *event=malloc(sizeof(event_t));
 	event->state=affine_transformation(from_list(state_tf,"A"),from_list(state_tf,"b"));
 	event->par=affine_transformation(from_list(param_tf,"A"),from_list(param_tf,"b"));
 
-	Rdata time = from_list(E,"time");
 	int lt=length(time);
 	event->time = REAL(time);
 	event->nt=lt;
@@ -226,7 +225,7 @@ model_function(const char *model_name, /* the base name of the model */
 	char *f=malloc(sizeof(char)*size);
 	strcat(strcpy(f,model_name),suffix);
 #ifdef DEBUG_PRINT
-	printf(stdout,"[%s] «%s»\n",__func__,f); fflush(stderr);
+	fprintf(stdout,"[%s] «%s»\n",__func__,f);
 #endif
 	return f;
 }
@@ -303,7 +302,7 @@ load_system(
 	}
 	if (!n) n=f(0,NULL,NULL,NULL);
 #ifdef DEBUG_PRINT
-	fprintf(stderr,"[%s] output function returns %li components.\n",__func__,n);
+	fprintf(stderr,"[%s] vf function returns %li components.\n",__func__,n);
 #endif
 	sys.function=f;
 	sys.jacobian=dfdy;
@@ -642,19 +641,19 @@ r_gsl_odeiv2_outer(
 #pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-		p=malloc(sizeof(double)*(np+nu));
-#ifdef DEBUG_PRINT
-		printf("[%s] solving %i of %i.\n",__func__,i,N);
-#endif
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
+		p=malloc(sizeof(double)*(np+nu));
+#ifdef DEBUG_PRINT
+		printf("[%s] solving %i of %i.\n",__func__,i,N);
+#endif
 		if (np_model!= np+nu) {
 			fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
 		}
-		if (nu) memcpy(p+np,REAL(input),nu*sizeof(double));
+		if (p && nu) memcpy(p+np,REAL(input),nu*sizeof(double));
 		ny=length(iv);
 		nt=length(t);
 		if (ny>0 && nt>0 && ny==sys.dimension){
@@ -692,8 +691,8 @@ r_gsl_odeiv2_outer(
 		free(p);
 		event_free(&ev);
 		gsl_odeiv2_driver_free(driver);
-		UNPROTECT(2);
 		if (observable) UNPROTECT(1);
+		UNPROTECT(2);
 	}
 	UNPROTECT(1);
 	return res_list;

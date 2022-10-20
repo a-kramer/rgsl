@@ -121,7 +121,7 @@ r_gsl_odeiv2_outer <- function(name,experiments,p){
 	stopifnot(file.exists(so))
 	stopifnot(is.matrix(p))
 	stopifnot(any(c('outputTimes','time') %in% names(experiments[[1]])))
-	stopifnot(is.double(experiments[[1]$outputTimes))
+	stopifnot(is.double(experiments[[1]]$outputTimes) || is.double(experiments[[1]]$time))
 	if (dim(p)[2]>length(experiments)){
 		y <- .Call(odeiv_outer_p,name,experiments,p)
 	} else {

@@ -14,7 +14,7 @@ r_gsl_odeiv2_outer(name, experiments, p)
 \item{model_name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
 }
 \value{
-the solution trajectories y(t;p) for all experiments
+the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
 }
 \description{
 This is a wrapper. It uses the .Call function to call the C
@@ -29,6 +29,15 @@ simulation experiments and M the number of columns in the p
 matrix. The output is an N-sized list of 3 dimensional arrays y,
 with y\link{i,j,k} corresponding to state variable i, time t\link{j}, and
 parameter set p\link{,k}.
+
+The model may have output functions that model observable
+quantities of a system, the c-source can include a function with a
+name ending in "_func" (e.g. mymodel.so with
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{int mymodel_func(double t, double y[], double fout[], void *p)
+}\if{html}{\out{</div>}}
+
+where fout will contain the output-function values after the call).
 }
 \examples{
 y0 <- c(0,1)

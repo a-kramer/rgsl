@@ -24,7 +24,7 @@ int HarmonicOscillator_vf(double t, const double y_[], double f_[], void *params
     double v_flux;
     double *p_;
     int RET=GSL_SUCCESS;
-    if (y_ && f_){
+    if (y_ && f_ && params){
       p_ = (double *) params;
 
       v          = y_[0];
@@ -55,7 +55,7 @@ int HarmonicOscillator_jac(double t, const double y_[], double *jac_, double *df
     double *p_;
     int RET=GSL_SUCCESS;
     
-    if (y_ && jac_ && dfdt_){
+    if (y_ && jac_ && dfdt_ && params){
       p_ = (double *) params;
 
       v          = y_[0];
@@ -91,7 +91,7 @@ int HarmonicOscillator_jacp(double t, const double y_[], double *jacp_, void *pa
     double k, c, F;
     double *p_;
     int RET=GSL_SUCCESS;
-    if (y_ && jacp_){
+    if (y_ && jacp_ && params){
       p_ = (double *) params;
 
       v          = y_[0];
@@ -117,7 +117,7 @@ int HarmonicOscillator_jacp(double t, const double y_[], double *jacp_, void *pa
 }
 
 /*
- *  User function: flux
+ *  User function
  */
 int HarmonicOscillator_func(double t, const double y_[], double *f, void *params)
 {
@@ -125,7 +125,7 @@ int HarmonicOscillator_func(double t, const double y_[], double *f, void *params
 	double k, c, F;
 	double v_flux;
 	double *p_ = params;
-	if (!f || !y_ || !p_)	return 1;
+	if (!f || !y_ || !p_) return 1;
 	v          = y_[0];
 	y          = y_[1];
 	k          = p_[0];
@@ -137,5 +137,26 @@ int HarmonicOscillator_func(double t, const double y_[], double *f, void *params
 	f[0] = sqrt(y*y+v*v);
 	//fprintf(stderr,"[%s] sqrt((%g)^2 + (%g)^2) = %g\n",__func__,y,v,f[0]);
 	//fflush(stderr);
+	return GSL_SUCCESS;
+}
+
+/* default parameters */
+int HarmonicOscillator_default(double t, void *params)
+{
+	double *p_ = params;
+	if (!p_) return 3;
+	p_[0]=1.0;
+	p_[1]=0.0;
+	p_[2]=0.0;
+	return GSL_SUCCESS;
+}
+
+int HarmonicOscillator_init(double t, double y_[], void *params)
+{
+	double v, y;
+	double *p_ = params;
+	if (!y_ || !params) return 2;
+	y_[0]=0.0;
+	y_[1]=1.0;
 	return GSL_SUCCESS;
 }
