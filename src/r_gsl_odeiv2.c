@@ -646,7 +646,7 @@ r_gsl_odeiv2_outer(
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
-		p=malloc(sizeof(double)*(np+nu));
+		p=malloc(sizeof(double)*np_model);
 #ifdef DEBUG_PRINT
 		printf("[%s] solving %i of %i.\n",__func__,i,N);
 #endif
@@ -768,7 +768,7 @@ r_gsl_odeiv2_outer2(
 				driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 				ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 				y=gsl_matrix_view_array(REAL(Y)+(nt*ny*k),nt,ny);
-				p=malloc(sizeof(double)*(np+nu));
+				p=malloc(sizeof(double)*np_model);
 				if (nu>0)
 					memcpy(p+np,REAL(input),nu*sizeof(double));
 				memcpy(p,REAL(parameters)+np*k,np*sizeof(double));
