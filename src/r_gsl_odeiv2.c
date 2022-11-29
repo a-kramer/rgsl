@@ -267,7 +267,7 @@ load_system(
  const char *model_name, /* the file-name will be constructed from this name, possibly from @link first_so@ */
  size_t n, /* number of state variables, 0 for auto-detection */
  double *p, /* default parameter vector */
- jacp *dfdp,/*[out] additional return value: a pointer to the parameter derivative (matrix) function.*/
+ jacp *dfdp, /*[out] additional return value: a pointer to the parameter derivative (matrix) function.*/
  func *F, /* [out] observables for this model (output functions) */
  def_par *DefParFunc) /* [out] function that returns default parameters */
 {
@@ -435,7 +435,10 @@ r_gsl_odeiv2(
 	// load system from file
 	jacp dfdp;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), ny, REAL(p), &dfdp, NULL,NULL);
-	if (sys.dimension == 0) return R_NilValue;
+	if (sys.dimension == 0) {
+		UNPROTECT(1);
+		return R_NilValue;
+	}
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
@@ -495,11 +498,13 @@ void set_names(Rdata list, const char *names[], size_t n)
 {
 	int i;
 	Rdata rnames=PROTECT(NEW_CHARACTER(n));
+	Rdata elt;
 	for (i=0;i<n;i++){
-		SET_STRING_ELT(rnames,i,mkChar(names[i]));
+		elt=PROTECT(mkChar(names[i]));
+		SET_STRING_ELT(rnames,i,elt);
 	}
 	SET_NAMES(list,rnames);
-	UNPROTECT(1);
+	UNPROTECT(1+n);
 }
 
 /* This prgram loads an ODE model, specified for `gsl_odeiv2`. It
@@ -534,7 +539,10 @@ r_gsl_odeiv2_simulate(
 	jacp dfdp=NULL;
 	func observable=NULL;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable, NULL);
-	if (sys.dimension == 0) return R_NilValue;
+	if (sys.dimension == 0) {
+		UNPROTECT(1); /* res_list */
+		return R_NilValue;
+	}
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
@@ -585,11 +593,12 @@ r_gsl_odeiv2_simulate(
 			SET_VECTOR_ELT(res_list,i,yf_list);
 			gsl_odeiv2_driver_free(driver);
 			event_free(&ev);
-			UNPROTECT(2);
-			if (observable) UNPROTECT(1);
+			UNPROTECT(1); /* yf_list */
+			if (observable) UNPROTECT(1); /* F */
+			UNPROTECT(1); /* Y */
 		}
 	}
-	UNPROTECT(1);
+	UNPROTECT(1); /* res_list */
 	return res_list;
 }
 
@@ -633,13 +642,16 @@ r_gsl_odeiv2_outer(
 	def_par default_parameters=NULL;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable, &default_parameters);
 	int np_model = default_parameters(0,NULL);
-	if (sys.dimension == 0) return R_NilValue;
+	if (sys.dimension == 0) {
+		UNPROTECT(1); /* res_list */
+		return R_NilValue;
+	}
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 	fflush(stdout);
 #endif
 
-#pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf,nu) firstprivate(sys,res_list,yf_names)
+#pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
@@ -675,7 +687,7 @@ r_gsl_odeiv2_outer(
 #endif
 				if (observable) {
 #ifdef DEBUG_PRINT
-					printf("calculating %li functions:",nf);
+					printf("calculating %li functions:\n",nf);
 #endif
 					for (j=0;j<nt;j++){
 						f=REAL(F)+(0+j*nf+k*nf*nt);
@@ -692,10 +704,11 @@ r_gsl_odeiv2_outer(
 		free(p);
 		event_free(&ev);
 		gsl_odeiv2_driver_free(driver);
-		if (observable) UNPROTECT(1);
-		UNPROTECT(2);
+		UNPROTECT(1); /* yf_list */
+		if (observable) UNPROTECT(1); /* F */
+		UNPROTECT(1); /* Y */
 	}
-	UNPROTECT(1);
+	UNPROTECT(1); /* res_list */
 	return res_list;
 }
 
@@ -738,7 +751,10 @@ r_gsl_odeiv2_outer2(
 	def_par default_parameters;
 	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable,&default_parameters);
 	int np_model = default_parameters(0,NULL);
-	if (sys.dimension == 0) return R_NilValue;
+	if (sys.dimension == 0) {
+		UNPROTECT(1); /* res_list */
+		return R_NilValue;
+	}
 #ifdef DEBUG_PRINT
 	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
 #endif
@@ -764,7 +780,7 @@ r_gsl_odeiv2_outer2(
 				nf=observable(0,NULL,NULL,NULL);
 				F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
 			}
-#pragma omp parallel for private(driver,j,l,y,f,p,ev) firstprivate(nf,ny,nt,M,F,Y,sys,time,initial_value)
+#pragma omp parallel for private(driver,j,l,y,f,p,ev) firstprivate(nf,ny,nt,nu,M,F,Y,sys,time,initial_value)
 			for (k=0;k<M;k++){
 				driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 				ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
@@ -780,7 +796,7 @@ r_gsl_odeiv2_outer2(
 #endif
 				if (observable) {
 #ifdef DEBUG_PRINT
-					printf("calculating %li functions:",nf);
+					printf("calculating %li functions:\n",nf);
 #endif
 					for (j=0;j<nt;j++){
 						f=REAL(F)+(0+j*nf+k*nf*nt);
@@ -797,9 +813,10 @@ r_gsl_odeiv2_outer2(
 		SET_VECTOR_ELT(yf_list,1,F);
 		set_names(yf_list,yf_names,2);
 		SET_VECTOR_ELT(res_list,i,yf_list);
-		UNPROTECT(2);
-		if (observable) UNPROTECT(1);
+		UNPROTECT(1); /* yf_list */
+		if (observable) UNPROTECT(1); /* F */
+		UNPROTECT(1); /* Y */
 	}
-	UNPROTECT(1);
+	UNPROTECT(1); /* res_list */
 	return res_list;
 }
