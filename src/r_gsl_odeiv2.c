@@ -389,6 +389,76 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	return status;
 }
 
+/* simulate an experiment, as specified via nested R list */
+void simulate_experiment(Rdata experiment, gsl_odeiv2_sys sys, gsl_vector *parameters, func observable, def_par ode_default_parameters, Rdata res_list){
+	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+	gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+	Rdata iv = from_list(experiment,"initial_value initialState");
+	Rdata t = from_list(experiments,"time outputTimes");
+	Rdata ev = event_from_R(from_list(experiments,"events scheduledEvents"));
+	Rdata input = from_list(experiment,"input");
+	size_t np=parameters->size;
+	size_t nu=(input && input!=R_NilValue)?length(input):0;
+	Rdata Y, F;
+	double *p;
+	int np_model=-1;
+	if (ode_default_parameters) {
+		np_model=ode_default_parameters(0.0,NULL);
+	} else {
+		np_model=np+nu;
+	}
+	p=malloc(sizeof(double)*np_model);
+#ifdef DEBUG_PRINT
+	printf("[%s] solving %i of %i.\n",__func__,i,N);
+#endif
+	if (np_model!= np+nu) {
+		fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
+	}
+	if (p && nu) memcpy(p+np,REAL(input),nu*sizeof(double));
+	ny=length(iv);
+	nt=length(t);
+	if (ny>0 && nt>0 && ny==sys.dimension){
+		initial_value=gsl_vector_view_array(REAL(iv),ny);
+		time=gsl_vector_view_array(REAL(t),nt);
+		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+		if (observable){
+			nf=observable(0,NULL,NULL,NULL);
+			F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+		}
+		for (k=0;k<M;k++){
+		y=gsl_matrix_view_array(REAL(Y)+(nt*ny*k),nt,ny);
+		/* assemble: model_parameters p = [experiment_parameters, input_parameters] */
+		memcpy(p,parameters->data,np*sizeof(double));
+		sys.params = p;
+		status=simulate_timeseries(sys,driver,&(initial_value.vector),&(time.vector),ev,&(y.matrix));
+#ifdef DEBUG_PRINT
+		printf("[%s] done.\n",__func__);
+#endif
+		if (observable) {
+#ifdef DEBUG_PRINT
+			printf("calculating %li functions:\n",nf);
+#endif
+			for (j=0;j<nt;j++){
+				f=REAL(F)+(0+j*nf+k*nf*nt);
+				observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+			}
+		}
+	}
+	}
+	yf_list=PROTECT(NEW_LIST(2));
+	SET_VECTOR_ELT(yf_list,0,Y);
+	SET_VECTOR_ELT(yf_list,1,F);
+	set_names(yf_list,yf_names,2);
+	SET_VECTOR_ELT(res_list,i,yf_list);
+	free(p);
+	event_free(&ev);
+	gsl_odeiv2_driver_free(driver);
+	UNPROTECT(1); /* yf_list */
+	if (observable) UNPROTECT(1); /* F */
+	UNPROTECT(1); /* Y */
+}
+
 /* This prgram loads an ODE model, as needed for `gsl_odeiv2`.
 	 It simulates the model for each column of initial
 	 conditions y0 and parameters p.
