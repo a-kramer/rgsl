@@ -55,8 +55,9 @@ int in_list(Rdata List, const char *name){
 	int N=length(List);
 	int l=strlen(name);
 	char *str=malloc(l+1);
+	char *context=NULL;
 	*(((char*) memcpy(str,name,l))+l)='\0';
-	char *t=strtok(str," ");
+	char *t=strtok_r(str," ",&context);
 	while (t){
 		for (i=0;i<N;i++){
 			if (strcmp(CHAR(STRING_ELT(List,i)),t) == MATCH){
@@ -64,7 +65,7 @@ int in_list(Rdata List, const char *name){
 				return i;
 			}
 		}
-		t=strtok(NULL," ");
+		t=strtok_r(NULL," ",&context);
 	}
 	free(str);
 	return -1;
@@ -638,7 +639,7 @@ r_gsl_odeiv2_outer(
 	fflush(stdout);
 #endif
 
-#pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf) firstprivate(sys,res_list,yf_names)
+#pragma omp parallel for private(driver,time,initial_value,y,ev,iv,t,Y,F,f,yf_list,p,j,k,l,nt,ny,nf,nu) firstprivate(sys,res_list,yf_names)
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
