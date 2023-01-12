@@ -116,7 +116,7 @@ affine_transformation(
 		for (j=0;j<n;j++) printf("%i%s",dim[j],j==n-1?"×":" ");
 		fprintf(stderr," and b is ");
 		for (j=0;j<n;j++) printf("%i%s",dim_b[j],j==n-1?"×":" ");
-		fprintf(stderr,"\nThey should be both three dimensional.\n");
+		fprintf(stderr,"\nThey should be both three dimensional (length(dim(A))==3).\n");
 		return NULL;
 	}
 	L->A=REAL(A);
@@ -139,9 +139,9 @@ void free_tf(affine_tf *L){
 	 is a diagonal matrix, then we only store the diagonal. n is stored
 	 in the transformation structure as length_b. */
 int /* the returned status of the gsl operations */
-apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vectors here*/
+apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vectors here */
 	 double *z,/* an array of size n, it is updated using L */
-	 int t_index)/* if A and b are each a series of matrices, pick the i-th */
+	 int t_index)/* if A and b are each a series of matrices, pick the one with this offset */
 {
 	if (!L) return GSL_SUCCESS; /* nothing to be done */
 	if (!z || !(t_index >=0 && L->l > 0)) {
@@ -204,6 +204,9 @@ event_t* event_from_R(Rdata E){
 	return event;
 }
 
+/* ths function takes the address of an event structure pointer, clears the
+	 memory and changes the pointer to NULL, so that the event cannot be
+	 accessed after being freed (except through a different pointer). */
 void event_free(event_t **ev){
 	if (ev && *ev){
 		free_tf((*ev)->state);
@@ -453,7 +456,7 @@ r_gsl_odeiv2(
 			event_names=GET_NAMES(event);
 			for (i=0;i<l;i++){
 				j=in_list(experiment_names,CHAR(VECTOR_ELT(event_names,i)));
-				ev[j] = event_from_R(VECTOR_ELT(event, i));
+				if (j>=0) ev[j] = event_from_R(VECTOR_ELT(event, i));
 			}
 		} else {
 			for (i=0;i<l;i++){
