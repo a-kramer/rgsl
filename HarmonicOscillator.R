@@ -21,11 +21,9 @@ event.tf <- function(t,state.tf,param.tf){
 	return(list(time=t,tf=tf))
 }
 
-
-test.plain <-function(){
+test.plain <- function(N=3){
 	name <- "HarmonicOscillator"
 	t <- seq(0,13,length.out=120)
-	N <- 3
 	ny <- 2
 	np <- 3
 	I3 <- diag(1,3,3)
@@ -35,22 +33,20 @@ test.plain <-function(){
 	p <- matrix(c(1,0,0),nrow=np,ncol=N)
 
 	for (i in 1:N) {
-		p[2,i]=(i-1); #/N
+		p[2,i]=(i-1)/N+rnorm(1,sd=0.05);
 	}
-	colnames(p) <- c("no friction","tiny amount of friction","lots of friction")
 	if (require("rgsl")){
 		y <- r_gsl_odeiv2(name,t=t,y0=y0,p=p)
-		plot(t,y[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
-		for (l in 1:N) {
-			lines(t,y[2,,l],lty=l)
-		}
-		pty=1:N;
-		pty[2:N]<-NA;
-		legend("bottomright",legend=colnames(p),lty=1:N,pch=pty)
+		## plot(t,y[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+		## for (l in 1:N) {
+		## 	lines(t,y[2,,l],lty=l)
+		## }
+		## pty=1:N;
+		## pty[2:N]<-NA;
+		## legend("bottomright",legend=colnames(p),lty=1:N,pch=pty)
 	}
 	return(y)
 }
-
 
 test.events <-function(){
 	name <- "HarmonicOscillator"
@@ -170,7 +166,7 @@ test.experiments2 <-function(){
 
 
 
-test.outer <-function(){
+test.outer <-function(M=4){
 	name <- "HarmonicOscillator"
 	t <- seq(0,13,length.out=120)
 	## 2-dim and 3-dim identity matrix
@@ -178,7 +174,7 @@ test.outer <-function(){
 	I2 <- diag(1,2,2)
 	N <- 1
 	event.t <- c(1.0)
-	M <- 4
+
 	param <- matrix(rnorm(M,mean=1,sd=0.2),nrow=1,ncol=M)
 
 	state.tf <- transform(length(event.t),I2,c(1,0))
@@ -204,7 +200,7 @@ test.outer <-function(){
 	return(y)
 }
 
-test.outer2 <-function(){
+test.outer2 <-function(M=20){
 	name <- "HarmonicOscillator"
 	t <- seq(0,13,length.out=120)
 	## 2-dim and 3-dim identity matrix
@@ -212,7 +208,6 @@ test.outer2 <-function(){
 	I2 <- diag(1,2,2)
 	N <- 1
 	event.t <- c(1.0)
-	M <- 20
 	param <- matrix(rnorm(M,mean=1,sd=0.2),nrow=1,ncol=M)
 
 	state.tf <- transform(length(event.t),I2,c(1,0))
@@ -224,15 +219,15 @@ test.outer2 <-function(){
 
 	if (require("rgsl")){
 		y <- r_gsl_odeiv2_outer(name,experiments,param)
-		plot(t,y[[1]][["state"]][2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
-		for (l in 1:N) {
-		for (k in 1:M){
-			lines(t,y[[l]][["state"]][2,,k],lty=l)
-		}
-		}
-		pty=1:M;
-		pty[2:M]<-NA;
-		legend("bottomright",legend=sprintf("%4.3g",param),lty=1:N,pch=pty)
+		##plot(t,y[[1]][["state"]][2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+		## for (l in 1:N) {
+		## for (k in 1:M){
+		## 	lines(t,y[[l]][["state"]][2,,k],lty=l)
+		## }
+		## }
+		## pty=1:M;
+		## pty[2:M]<-NA;
+		## legend("bottomright",legend=sprintf("%4.3g",param),lty=1:N,pch=pty)
 
 	}
 	return(y)
