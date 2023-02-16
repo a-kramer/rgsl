@@ -33,7 +33,7 @@ test.plain <-function(N=3){
 	y0 <- matrix(c(0,1),nrow=ny,ncol=N)
 	p <- matrix(c(1,0,0),nrow=np,ncol=N)
 
-	p[2,]=seq(0,N-1,length.out=N) + rnorm(N,mu=0,sd=0.05);
+	p[2,]=seq(0,N-1,length.out=N) + rnorm(N,mean=0,sd=0.05);
 
 	if (require("rgsl")){
 		y <- r_gsl_odeiv2(name,t=t,y0=y0,p=p)
@@ -165,7 +165,7 @@ test.experiments2 <-function(){
 	return(y)
 }
 
-test.outer <-function(){
+test.outer <-function(M=4){
 	name <- "HarmonicOscillator"
 	t <- seq(0,13,length.out=120)
 	## 2-dim and 3-dim identity matrix
@@ -173,7 +173,6 @@ test.outer <-function(){
 	I2 <- diag(1,2,2)
 	N <- 1
 	event.t <- c(1.0)
-	M <- 4
 	paramG <- matrix(rnorm(M,mean=1,sd=0.2),nrow=1,ncol=M)
 	paramU <- matrix(runif(M,min=0.5,max=1.5),nrow=1,ncol=M)
 	state.tf <- transform(length(event.t),I2,c(1,0))
@@ -185,7 +184,7 @@ test.outer <-function(){
 
 	if (require("rgsl")){
 		param<-list(Uniform=paramU,Gaussian=paramG)
-		Y <- mclapply(X=param, function(p) r_gsl_odeiv2_outer(name,experiments,p))
+		Y <- parallel::mclapply(X=param, function(p) r_gsl_odeiv2_outer(name,experiments,p))
 		for (y in Y){
 		dev.new()
 		plot(t,y[[1]][["state"]][2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
