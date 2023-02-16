@@ -4,7 +4,7 @@ In this package we consider the initial value problem:
 
 <span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>ẏ</em> = <em>f</em>(<em>y</em>, <em>t</em>; <em>p</em>)</span>,<span style="width=4em"/><span class="math display" style="width: 15em; margin: auto; padding: 2em"><em>y</em>(<em>t</em><sub>0</sub>) = <em>y</em><sub>0</sub></span>
 
-where _p_ is a parameter vector. 
+where _p_ is a parameter vector.
 
 We think that it is helpful to distinguish between _constants_
 (parameters that never change), _unknown parameters_, and _input
@@ -23,7 +23,7 @@ concatenate, like in R).
 To determine the parameters _k_, the model _f_ needs to be simulated
 in the provided experimental scenarios and the parameters are found
 through optimisation, or sampling (or perhaps another, similar
-method). 
+method).
 
 Typically, these methods need to solve the model many times. This is
 especially true for Bayesian methods (sampling). So, solving a batch
