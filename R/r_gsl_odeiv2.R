@@ -10,7 +10,7 @@
 #' columns in p. The output is a 3 dimensional array y, with y[i,j,k]
 #' corresponding to state variable i, time t[j], and parameter set
 #' p[,k].
-#' 
+#'
 #' @param model_name the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)
 #' @param t a vector of time values for the desired output
 #' @param y0 initial value of the state vector, at time t[1]
@@ -102,13 +102,13 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 #' ```
 #'
 #' where fout will contain the output-function values after the call).
-#' 
+#'
 #' @param model_name the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)
 #' @param experiments a list of N simulation experiments (time, parameters, initial value, events)
 #' @param p a matrix of parameters with M columns
 #' @return the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
 #' @keywords ODE
-#' @useDynLib rgsl, odeiv_outer_e=r_gsl_odeiv2_outer, odeiv_outer_p=r_gsl_odeiv2_outer2
+#' @useDynLib rgsl, odeiv_outer_e=r_gsl_odeiv2_outer
 #' @export
 #' @examples
 #' y0 <- c(0,1)
@@ -122,11 +122,7 @@ r_gsl_odeiv2_outer <- function(name,experiments,p){
 	stopifnot(is.matrix(p))
 	stopifnot(any(c('outputTimes','time') %in% names(experiments[[1]])))
 	stopifnot(is.double(experiments[[1]]$outputTimes) || is.double(experiments[[1]]$time))
-	if (dim(p)[2]>length(experiments)){
-		y <- .Call(odeiv_outer_p,name,experiments,p)
-	} else {
-		y <- .Call(odeiv_outer_e,name,experiments,p)
-	}
+	y <- .Call(odeiv_outer_e,name,experiments,p)
 	return(y)
 }
 

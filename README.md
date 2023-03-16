@@ -84,9 +84,6 @@ function of the same name. If the parameters _p_ are a matrix then
 `y0` should be as well (initial values), with identical numbers of
 columns.
 
-OpenMP is used to make this set of simulations run in parallel, if
-possible.
-
 The simulations can be more intricate if the [event system](EVENTS.md) is used.
 
 ### Returns
@@ -136,8 +133,8 @@ The entries are found by their name, so they naming is not arbitrary (but there 
 | `parameters`,`param`,`par` | no | a numeric vector of parameters |
 | `events`,`scheduledEvents` | yes | an event description for this run |
 
-The simulation experiments will be done in parallel.  This interface
-is useful whenever your problem lends itself to this description.
+This interface is useful whenever your problem lends itself to this
+description.
 
 Particularly, if you want to simulate a subset of experiments, you can
 remove unwanted items from the list easily (which is not as easy with
@@ -210,7 +207,7 @@ the `${MODEL}_func` function.
 ## SBtabVFGEN
 
 We are working on models in systems biology and define models using
-the SBtab format. Therefore, this project integrates somwhat well with
+the SBtab format (loosely). Therefore, this project integrates somwhat well with
 [SBtabVFGEN](https://github.com/a-kramer/SBtabVFGEN): it contains
 `sbtab_to_vfgen`, which prints vfgen files (given SBtab). 
 
@@ -222,9 +219,9 @@ workflow could be:
 ```
   User written:                           generated          Simulation
   +-----------+      +-----------+      +------------+      +----------+
-  |           |      |           |      |  (CVODE)   |      |          |
-  | SBtab (M) +--+-->+   VFGEN   +----->+  ODE code  +--+-->+   rgsl   |
-  |           |  |   |           |      | +jacobian  |  |   |          |
+  |           |      |  vfgen    |      |  (GSL)     |      |          |
+  | SBtab (M) +--+-->+    OR     +----->+  ODE code  +--+-->+   rgsl   |
+  |           |  |   |  ode.sh   |      | +jacobian  |  |   |          |
   +-----------+  |   +-----------+      +------------+  |   +----------+
                  |                                      |
             +----+--------------+                 +----------------+
@@ -234,3 +231,22 @@ workflow could be:
             +-------------------+                 +----------------+
 
 ```
+
+VFGEN can be difficult to install. As an alternative, one can also
+generate the ode code via `ode.sh` in the
+[RPN-derivative/sh](github.com/icpm-kth/RPN-derivative) repository
+(ode.sh accepts the sam efile format as vfgen, but only generates code
+in C or R; it also lacks the time delay features of vfgen).
+
+# Notes
+
+In earlier versions we used OpenMP for parallelization, this has not
+improved simulation times (parallelization is hard) and
+`parallel::mclapply` turned out much easier to use (as are probably
+the other functions in the parallel package).
+
+OpenMP had the advantage that the returned value was shaped exactly as
+we wanted it to be, while with `parallel::mclapply`, the result is
+shaped by that function and need to be reshaped to recreate the old
+values. 
+

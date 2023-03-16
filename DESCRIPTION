@@ -1,13 +1,13 @@
 Package: rgsl
 Title: Solves Ordinary Differential Equations (ODEs) via GSL solvers
-Version: 0.0.1
-Authors@R: 
+Version: 0.1.0
+Authors@R:
     person(given = "Andrei",
            family = "Kramer-Miehe",
            role = c("aut", "cre"),
            email = "andrei.kramer@scilifelab.se",
            comment = c(ORCID = "0000-0002-3828-6978"))
-Description: Initial Value Problems (IVPs) involving ODEs are solved for multiple parameter sets. We assume that the model parameters can be expressed as one column-vector, this package will solve the IVP for each column of a parameter matrix p. 
+Description: Initial Value Problems (IVPs) involving ODEs are solved for multiple parameter sets. We assume that the model parameters can be expressed as one column-vector, this package will solve the IVP for each column of a parameter matrix p.
 License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true
