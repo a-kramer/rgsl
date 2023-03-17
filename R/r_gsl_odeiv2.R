@@ -15,6 +15,9 @@
 #' @param t a vector of time values for the desired output
 #' @param y0 initial value of the state vector, at time t[1]
 #' @param p a matrix, each column is a valid parameter set for the model
+#' @param abs.tol absolute tolerance (one real number, defaults to 1e-6)
+#' @param rel.tol relative tolerance (one real number, defaults to 1e-5)
+#' @param initial.step.size initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3
 #' @return the solution trajectories y(t;p) for all p[,k] (3-dim-array)
 #' @keywords ODE
 #' @useDynLib rgsl, odeiv=r_gsl_odeiv2
@@ -24,7 +27,7 @@
 #' t <- seq(0,1,length.out=100)
 #' p <- c(1,0,0)
 #' y <- r_gsl_odeiv2("HarmonicOscillator",t,y0,p)
-r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
+r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -45,7 +48,8 @@ r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
 	if (is.character(colnames(p)) && is.character(names(events))) {
 		stopifnot(all(names(events) %in% colnames(p)))
 	}
-	y <- .Call(odeiv,name,t,y0,p,events)
+	## this is where the call happens:
+	y <- .Call(odeiv,name,t,y0,p,events,abs.tol,rel.tol,initial.step.size)
 	dimnames(y) <- list(rownames(y0),names(t),colnames(p))
 	return(y)
 }
@@ -69,6 +73,9 @@ r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
 #' @return the solution trajectories y(t;p) for all experiments
 #' @keywords ODE
 #' @useDynLib rgsl, simulate=r_gsl_odeiv2_simulate
+#' @param abs.tol absolute tolerance (one real number, defaults to 1e-6)
+#' @param rel.tol relative tolerance (one real number, defaults to 1e-5)
+#' @param initial.step.size initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3
 #' @export
 #' @examples
 #' y0 <- c(0,1)
@@ -76,7 +83,7 @@ r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
 #' p <- c(1,0,0)
 #' e <- list(time=t,parameters=p,initial_value=y0)
 #' y <- r_gsl_odeiv2("HarmonicOscillator",t,y0,p)
-r_gsl_odeiv2_sim <- function(name,experiments){
+r_gsl_odeiv2_sim <- function(name,experiments,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -84,7 +91,7 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 		comment(name)<-so
 	}
 	stopifnot(file.exists(so))
-	y <- .Call(simulate,name,experiments)
+	y <- .Call(simulate,name,experiments,abs.tol,rel.tol,initial.step.size)
 	return(y)
 }
 
@@ -116,6 +123,9 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 #' @param model_name the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)
 #' @param experiments a list of N simulation experiments (time, parameters, initial value, events)
 #' @param p a matrix of parameters with M columns
+#' @param abs.tol absolute tolerance (one real number, defaults to 1e-6)
+#' @param rel.tol relative tolerance (one real number, defaults to 1e-5)
+#' @param initial.step.size initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3
 #' @return the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
 #' @keywords ODE
 #' @useDynLib rgsl, odeiv_outer_e=r_gsl_odeiv2_outer
@@ -126,7 +136,7 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 #' u <- c(0,0)
 #' e <- list(time=t,input=u,initial_value=y0)
 #' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
-r_gsl_odeiv2_outer <- function(name,experiments,p){
+r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -137,7 +147,7 @@ r_gsl_odeiv2_outer <- function(name,experiments,p){
 	stopifnot(is.matrix(p))
 	stopifnot(any(c('outputTimes','time') %in% names(experiments[[1]])))
 	stopifnot(is.double(experiments[[1]]$outputTimes) || is.double(experiments[[1]]$time))
-	y <- .Call(odeiv_outer_e,name,experiments,p)
+	y <- .Call(odeiv_outer_e,name,experiments,p,abs.tol,rel.tol,initial.step.size)
 	return(y)
 }
 

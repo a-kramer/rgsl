@@ -400,10 +400,15 @@ r_gsl_odeiv2(
  Rdata tspan, /* a vector of output times with tspan[0] crresponding to y0 */
  Rdata y0, /* initial conditions at tspan[0], can be a matrix*/
  Rdata p, /* parameter matrix */
- Rdata event) /* list of events */
+ Rdata event, /* list of events */
+ Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
+ Rdata relative_tolerance, /* relative tolerance for GSL's solver */
+ Rdata initial_step_size) /* initial guess for the step size */
 {
 	int i,j;
-	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+	double abs_tol=asReal(absolute_tolerance);
+	double rel_tol=asReal(relative_tolerance);
+	double h=asReal(initial_step_size);
 	size_t nt=length(tspan);
 	size_t ny,np,N;
 	Rdata experiment_names;
@@ -512,12 +517,18 @@ void set_names(Rdata list, const char *names[], size_t n)
 Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_simulate(
  Rdata modelName, /* a string */
- Rdata experiments) /* a list of simulation experiments */
+ Rdata experiments, /* a list of simulation experiments */
+ Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
+ Rdata relative_tolerance, /* relative tolerance for GSL's solver */
+ Rdata initial_step_size) /* initial guess for the step size */
 {
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,status;
-	double *f, abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+	double *f;
+	double abs_tol=asReal(absolute_tolerance);
+	double rel_tol=asReal(relative_tolerance);
+	double h=asReal(initial_step_size);
 	int N=GET_LENGTH(experiments);
 #ifdef DEBUG_PRINT
 	printf("[%s] simulating %i experiments\n",__func__,N);
@@ -612,12 +623,17 @@ Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_outer(
  Rdata modelName, /* a string */
  Rdata experiments, /* a list of simulation experiments */
- Rdata parameters) /* a matrix of parameterization columns*/
+ Rdata parameters, /* a matrix of parameterization columns*/
+ Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
+ Rdata relative_tolerance, /* relative tolerance for GSL's solver */
+ Rdata initial_step_size) /* initial guess for the step size */
 {
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,k,l,status;
-	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
+	double abs_tol=asReal(absolute_tolerance);
+	double rel_tol=asReal(relative_tolerance);
+	double h=asReal(initial_step_size);
 	int N=GET_LENGTH(experiments);
 	size_t np=nrows(parameters);
 	size_t M=ncols(parameters);
