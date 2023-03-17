@@ -261,17 +261,15 @@ void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` 
 	 this is returned as a function pointer instead. */
 gsl_odeiv2_system /* the system structure, see gsl documentation. */
 load_system(
- const char *model_name, /* the file-name will be constructed from this name, possibly from @link first_so@ */
+ const char *model_name, /* the name of the model, function names will be inferred from that: model_name_vf, model_name_jac, etc. */
+ const char *model_so, /* the path to the shared library that contains the model. */
  size_t n, /* number of state variables, 0 for auto-detection */
  double *p, /* default parameter vector */
  jacp *dfdp, /*[out] additional return value: a pointer to the parameter derivative (matrix) function.*/
  func *F, /* [out] observables for this model (output functions) */
  def_par *DefParFunc) /* [out] function that returns default parameters */
 {
-	char *so=model_function(model_name,".so");
-	char *local_so = model_function("./",so);
-	void *lib=dlopen(local_so,RTLD_LAZY);
-	free(local_so);
+	void *lib=dlopen(model_so,RTLD_LAZY);
 	void *dfdy;
 	gsl_odeiv2_system sys={NULL,NULL,0,NULL};
 	vf f;
@@ -295,7 +293,7 @@ load_system(
 			*DefParFunc = load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
 		}
 	} else {
-		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,so,dlerror());
+		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,model_so,dlerror());
 		return sys;
 	}
 	if (!n) n=f(0,NULL,NULL,NULL);
@@ -306,7 +304,6 @@ load_system(
 	sys.jacobian=dfdy;
 	sys.dimension=n;
 	sys.params=p;
-	free(so);
 #ifdef DEBUG_PRINT
 	fprintf(stderr,"[%s] ode system created.\n",__func__); fflush(stderr);
 #endif
@@ -327,7 +324,7 @@ void check_status(int status, /*the returned value from gsl_odeiv2_driver_apply 
 		error("[%s] time_point %li: maximum number of steps reached.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
 		break;
 	case GSL_ENOPROG:
-		error("[%s] time_point %li: step size dropeed below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+		error("[%s] time_point %li: step size dropped below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
 		break;
 	case GSL_EBADFUNC:
 		error("[%s] time_point %li: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
@@ -399,7 +396,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 */
 Rdata /* the trajectories as a three dimensional array */
 r_gsl_odeiv2(
- Rdata model_name, /* a string */
+ Rdata modelName, /* a string */
  Rdata tspan, /* a vector of output times with tspan[0] crresponding to y0 */
  Rdata y0, /* initial conditions at tspan[0], can be a matrix*/
  Rdata p, /* parameter matrix */
@@ -411,6 +408,8 @@ r_gsl_odeiv2(
 	size_t ny,np,N;
 	Rdata experiment_names;
 	int ExperimentsAreNamed = 0;
+	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
+	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	if (isMatrix(p)){
 		np=nrows(p);
 		N=ncols(p);
@@ -431,7 +430,7 @@ r_gsl_odeiv2(
 
 	// load system from file
 	jacp dfdp;
-	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), ny, REAL(p), &dfdp, NULL,NULL);
+	gsl_odeiv2_system sys = load_system(model_name, model_so, ny, REAL(p), &dfdp, NULL,NULL);
 	if (sys.dimension == 0) {
 		fprintf(stderr,"system dimension is «%li», nothing left to do.\n",sys.dimension);
 		return R_NilValue;
@@ -512,12 +511,13 @@ void set_names(Rdata list, const char *names[], size_t n)
 */
 Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_simulate(
- Rdata model_name, /* a string */
+ Rdata modelName, /* a string */
  Rdata experiments) /* a list of simulation experiments */
 {
+	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
+	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,status;
 	double *f, abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
-
 	int N=GET_LENGTH(experiments);
 #ifdef DEBUG_PRINT
 	printf("[%s] simulating %i experiments\n",__func__,N);
@@ -534,7 +534,7 @@ r_gsl_odeiv2_simulate(
 	event_t *ev=NULL;
 	jacp dfdp=NULL;
 	func observable=NULL;
-	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable, NULL);
+	gsl_odeiv2_system sys = load_system(model_name, model_so, 0, NULL, &dfdp, &observable, NULL);
 	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */
 		fprintf(stderr,"[%s] system dimension is «%li».\n",__func__,sys.dimension);
@@ -610,10 +610,12 @@ r_gsl_odeiv2_simulate(
 */
 Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_outer(
- Rdata model_name, /* a string */
+ Rdata modelName, /* a string */
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters) /* a matrix of parameterization columns*/
 {
+	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
+	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,k,l,status;
 	double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
 	int N=GET_LENGTH(experiments);
@@ -636,7 +638,7 @@ r_gsl_odeiv2_outer(
 	jacp dfdp=NULL;
 	func observable=NULL;
 	def_par default_parameters=NULL;
-	gsl_odeiv2_system sys = load_system(CHAR(STRING_ELT(model_name,0)), 0, NULL, &dfdp, &observable, &default_parameters);
+	gsl_odeiv2_system sys = load_system(model_name, model_so, 0, NULL, &dfdp, &observable, &default_parameters);
 	int np_model = default_parameters(0,NULL);
 	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */

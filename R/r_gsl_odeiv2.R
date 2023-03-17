@@ -25,24 +25,29 @@
 #' p <- c(1,0,0)
 #' y <- r_gsl_odeiv2("HarmonicOscillator",t,y0,p)
 r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
-    so <- paste0(name,".so")
-    stopifnot(file.exists(so))
-    if ("time" %in% names(events)) {
-        stopifnot(is.vector(p))
-        events=list(events)
-    }
-    if (is.vector(y0)){
-        dim(y0)<-c(length(y0),1)
-    }
-    if (is.vector(p)) {
-        dim(p)<-c(length(p),1)
-    }
-    if (is.character(colnames(p)) && is.character(names(events))) {
-        stopifnot(all(names(events) %in% colnames(p)))
-    }
-    y <- .Call(odeiv,name,t,y0,p,events)
-    dimnames(y) <- list(rownames(y0),names(t),colnames(p))
-    return(y)
+	if (is.character(comment(name))){
+		so <- comment(name)
+	} else {
+		so <- paste0("./",name,".so")
+		comment(name)<-so
+	}
+	stopifnot(file.exists(so))
+	if ("time" %in% names(events)) {
+		stopifnot(is.vector(p))
+		events <- list(events)
+	}
+	if (is.vector(y0)){
+		dim(y0)<-c(length(y0),1)
+	}
+	if (is.vector(p)) {
+		dim(p)<-c(length(p),1)
+	}
+	if (is.character(colnames(p)) && is.character(names(events))) {
+		stopifnot(all(names(events) %in% colnames(p)))
+	}
+	y <- .Call(odeiv,name,t,y0,p,events)
+	dimnames(y) <- list(rownames(y0),names(t),colnames(p))
+	return(y)
 }
 
 
@@ -58,7 +63,7 @@ r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
 #' columns in p. The output is a 3 dimensional array y, with y[i,j,k]
 #' corresponding to state variable i, time t[j], and parameter set
 #' p[,k].
-#' 
+#'
 #' @param model_name the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)
 #' @param experiments a list of simulation experiments (time, parameters, initial value, events)
 #' @return the solution trajectories y(t;p) for all experiments
@@ -72,10 +77,15 @@ r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL){
 #' e <- list(time=t,parameters=p,initial_value=y0)
 #' y <- r_gsl_odeiv2("HarmonicOscillator",t,y0,p)
 r_gsl_odeiv2_sim <- function(name,experiments){
-    so <- paste0(name,".so")
-    stopifnot(file.exists(so))
-    y <- .Call(simulate,name,experiments)
-    return(y)
+	if (is.character(comment(name))){
+		so <- comment(name)
+	} else {
+		so <- paste0("./",name,".so")
+		comment(name)<-so
+	}
+	stopifnot(file.exists(so))
+	y <- .Call(simulate,name,experiments)
+	return(y)
 }
 
 
@@ -117,7 +127,12 @@ r_gsl_odeiv2_sim <- function(name,experiments){
 #' e <- list(time=t,input=u,initial_value=y0)
 #' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
 r_gsl_odeiv2_outer <- function(name,experiments,p){
-	so <- paste0(name,".so")
+	if (is.character(comment(name))){
+		so <- comment(name)
+	} else {
+		so <- paste0("./",name,".so")
+		comment(name)<-so
+	}
 	stopifnot(file.exists(so))
 	stopifnot(is.matrix(p))
 	stopifnot(any(c('outputTimes','time') %in% names(experiments[[1]])))

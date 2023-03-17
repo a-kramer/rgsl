@@ -3,7 +3,7 @@ model.so <- function(name){
 	CFLAGS <- "-shared -fPIC -Wall -O2"
 	so <- sprintf("%s.so",name)
 	if (!file.exists(so)){
-		system2("gcc",sprintf("%s -o %s %s_gvf.c %s",CFLAGS,so,name,LIBS))
+		system2("cc",sprintf("%s -o %s '%s_gvf.c' %s",CFLAGS,so,name,LIBS))
 	}
 	return(so)
 }
@@ -24,6 +24,7 @@ event.tf <- function(t,state.tf,param.tf){
 
 test.plain <-function(N=3){
 	name <- "HarmonicOscillator"
+	comment(name)  <- "./HarmonicOscillator.so"
 	t <- seq(0,13,length.out=120)
 	ny <- 2
 	np <- 3
