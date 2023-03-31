@@ -201,7 +201,7 @@ event_t* event_from_R(Rdata E){
 	return event;
 }
 
-/* ths function takes the address of an event structure pointer, clears the
+/* this function takes the address of an event structure pointer, clears the
 	 memory and changes the pointer to NULL, so that the event cannot be
 	 accessed after being freed (except through a different pointer). */
 void event_free(event_t **ev){
