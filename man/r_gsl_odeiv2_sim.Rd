@@ -4,10 +4,22 @@
 \alias{r_gsl_odeiv2_sim}
 \title{Initial Value Problem solution in C}
 \usage{
-r_gsl_odeiv2_sim(name, experiments)
+r_gsl_odeiv2_sim(
+  name,
+  experiments,
+  abs.tol = 1e-06,
+  rel.tol = 1e-05,
+  initial.step.size = 0.001
+)
 }
 \arguments{
 \item{experiments}{a list of simulation experiments (time, parameters, initial value, events)}
+
+\item{abs.tol}{absolute tolerance (one real number, defaults to 1e-6)}
+
+\item{rel.tol}{relative tolerance (one real number, defaults to 1e-5)}
+
+\item{initial.step.size}{initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3}
 
 \item{model_name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
 }
