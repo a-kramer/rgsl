@@ -1,9 +1,9 @@
-model.so <- function(name){
+model.so <- function(c.name){
 	LIBS <- "-lgsl -lgslcblas -lm"
 	CFLAGS <- "-shared -fPIC -Wall -O2"
-	so <- sprintf("%s.so",name)
+	so <- sub("_gvf[.]c",".so",basename(c.name))
 	if (!file.exists(so)){
-		system2("gcc",sprintf("%s -o %s %s_gvf.c %s",CFLAGS,so,name,LIBS))
+		system2("gcc",sprintf("%s -o %s %s %s",CFLAGS,so,c.name,LIBS))
 	}
 	return(so)
 }
