@@ -28,7 +28,8 @@ model.so <- function(file.c){
 #' @return a list of two items, a transformation array A and a shift
 #'     array b, both three dimensional: length(dim([Ab]))==3. A and b
 #'     repeat lt times.
-transform <- function(lt=1,A=1,b=0){
+#' @export
+affine.transform <- function(lt=1,A=1,b=0){
 	n <- nrow(as.matrix(A))
 	m <- nrow(as.matrix(b))
 	A <- array(A,dim=c(n,n,lt))
@@ -60,4 +61,19 @@ transform <- function(lt=1,A=1,b=0){
 event.tf <- function(t,state.tf,param.tf){
 	tf <- list(state=state.tf,param=param.tf)
 	return(list(time=t,tf=tf))
+}
+
+#' Create a simulation experiment
+#'
+#' 
+make.experiment <- function(t,y0,par,event.t=NULL,state.tf=NULL,param.tf=NULL){
+	if (!is.null(event.t)){
+		stopifnot(length(event.t) == dim(state.tf$A)[3])
+		stopifnot(length(event.t) == dim(state.tf$b)[2])
+		stopifnot(length(event.t) == dim(param.tf$A)[3])
+		stopifnot(length(event.t) == dim(param.tf$b)[2])
+		ev <- event.tf(event.t,state.tf,param.tf)
+		return(list(time=t,parameters=par,initial_value=y0,events=ev))
+	}
+	return(list(time=t,parameters=par,initial_value=y0))
 }

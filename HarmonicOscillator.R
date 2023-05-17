@@ -46,15 +46,15 @@ test.events <-function(){
 	## events:
 	all.events=list()
 	event.t <- c(1.0,2.0,3.0)
-	state.tf <- transform(length(event.t),I2,c(1,0))
+	state.tf <- affine.transform(length(event.t),I2,c(1,0))
 
-	param.tf <- transform(length(event.t),I3,c(0,0,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0,0))
 	all.events[[1]] <- event.tf(event.t,state.tf,param.tf)
 
-	param.tf <- transform(length(event.t),I3,c(0,0.1,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.1,0))
 	all.events[[2]] <- event.tf(event.t,state.tf,param.tf)
 
-	param.tf <- transform(length(event.t),I3,c(0,0.2,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.2,0))
 	all.events[[3]] <- event.tf(event.t,state.tf,param.tf)
 
 	names(all.events) <- colnames(p);
@@ -83,15 +83,15 @@ test.experiments <-function(){
 	N <- 4
 	event.t <- c(1.0,2.0,3.0)
 
-	state.tf <- transform(length(event.t),I2,c(1,0))
+	state.tf <- affine.transform(length(event.t),I2,c(1,0))
 
-	param.tf <- transform(length(event.t),I3,c(0,0,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0,0))
 	no.friction <- list(time=t,parameters=c(1,0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
-	param.tf <- transform(length(event.t),I3,c(0,0.1,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.1,0))
 	low.friction <- list(time=t,parameters=c(1,1,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
-	param.tf <- transform(length(event.t),I3,c(0,0.2,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.2,0))
 	medium.friction <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
 	medium.friction.no.events <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1))
@@ -119,15 +119,15 @@ test.experiments2 <-function(){
 	N <- 3
 	event.t <- c(1.0,2.0,3.0)
 
-	state.tf <- transform(length(event.t),I2,c(1,0))
+	state.tf <- affine.transform(length(event.t),I2,c(1,0))
 
-	param.tf <- transform(length(event.t),I3,c(0,0,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0,0))
 	no.friction <- list(outputTimes=t,parameters=c(1,0,0),initialState=c(0,1),scheduledEvents=event.tf(event.t,state.tf,param.tf))
 
-	param.tf <- transform(length(event.t),I3,c(0,0.1,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.1,0))
 	low.friction <- list(outputTimes=t,parameters=c(1,1,0),initialState=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
-	param.tf <- transform(length(event.t),I3,c(0,0.2,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.2,0))
 	medium.friction <- list(outputTimes=t,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	experiments=list(a=no.friction,b=low.friction,c=medium.friction)
 	if (require("rgsl")){
@@ -153,9 +153,9 @@ test.outer <-function(M=4){
 	event.t <- c(1.0)
 	paramG <- matrix(rnorm(M,mean=1,sd=0.2),nrow=1,ncol=M)
 	paramU <- matrix(runif(M,min=0.5,max=1.5),nrow=1,ncol=M)
-	state.tf <- transform(length(event.t),I2,c(1,0))
+	state.tf <- affine.transform(length(event.t),I2,c(1,0))
 
-	param.tf <- transform(length(event.t),I3,c(0,0,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0,0))
 	no.friction <- list(time=t,input=c(0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
 	experiments=list(a=no.friction)
@@ -190,15 +190,15 @@ test.outer.parallel <- function(M=4){
 	paramG <- matrix(rnorm(1*M,mean=1,sd=0.2),nrow=1,ncol=M)
 
 	event.t <- c(1.0,2.0,3.0)
-	state.tf <- transform(length(event.t),I2,c(1,0))
+	state.tf <- affine.transform(length(event.t),I2,c(1,0))
 
-	param.tf <- transform(length(event.t),I3,c(0,0,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0,0))
 	no.friction <- list(time=t,initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf),input=c(0,0))
 
-	param.tf <- transform(length(event.t),I3,c(0,0.1,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.1,0))
 	low.friction <- list(time=t,initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf),input=c(0,1))
 
-	param.tf <- transform(length(event.t),I3,c(0,0.2,0))
+	param.tf <- affine.transform(length(event.t),I3,c(0,0.2,0))
 	medium.friction <- list(time=t,initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf),input=c(0,2))
 
 	medium.friction.no.events <- list(time=t,initial_value=c(0,1),input=c(0,2))
