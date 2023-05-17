@@ -1,25 +1,3 @@
-model.so <- function(name){
-	LIBS <- "-lgsl -lgslcblas -lm"
-	CFLAGS <- "-shared -fPIC -Wall -O2"
-	so <- sprintf("%s.so",name)
-	if (!file.exists(so)){
-		system2("cc",sprintf("%s -o %s '%s_gvf.c' %s",CFLAGS,so,name,LIBS))
-	}
-	return(so)
-}
-
-transform <- function(lt=1,A=1,b=0){
-	n <- nrow(as.matrix(A))
-	m <- nrow(as.matrix(b))
-	A <- array(A,dim=c(n,n,lt))
-	b <- array(b,dim=c(m,1,lt));
-	return(list(A=A,b=b))
-}
-
-event.tf <- function(t,state.tf,param.tf){
-	tf <- list(state=state.tf,param=param.tf)
-	return(list(time=t,tf=tf))
-}
 
 test.plain <-function(N=3){
 	name <- "HarmonicOscillator"
