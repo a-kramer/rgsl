@@ -21,7 +21,6 @@ event.tf <- function(t,state.tf,param.tf){
 	return(list(time=t,tf=tf))
 }
 
-
 test.plain <-function(N=3){
 	name <- "HarmonicOscillator"
 	comment(name)  <- "./HarmonicOscillator.so"
@@ -199,6 +198,54 @@ test.outer <-function(M=4){
 		}
 	}
 	return(y)
+}
+
+test.outer.parallel <- function(M=4){
+	require(parallel)
+	name <- "HarmonicOscillator"
+	comment(name) <- "./HarmonicOscillator.so"
+	t <- seq(0,13,length.out=120)
+	## 2-dim and 3-dim identity matrix
+	I3 <- diag(1,3,3)
+	I2 <- diag(1,2,2)
+	## 1 free parameter, 2 input parameters
+	paramG <- matrix(rnorm(1*M,mean=1,sd=0.2),nrow=1,ncol=M)
+
+	event.t <- c(1.0,2.0,3.0)
+	state.tf <- transform(length(event.t),I2,c(1,0))
+
+	param.tf <- transform(length(event.t),I3,c(0,0,0))
+	no.friction <- list(time=t,initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf),input=c(0,0))
+
+	param.tf <- transform(length(event.t),I3,c(0,0.1,0))
+	low.friction <- list(time=t,initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf),input=c(0,1))
+
+	param.tf <- transform(length(event.t),I3,c(0,0.2,0))
+	medium.friction <- list(time=t,initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf),input=c(0,2))
+
+	medium.friction.no.events <- list(time=t,initial_value=c(0,1),input=c(0,2))
+
+	experiments <- rep(list(a=no.friction,b=low.friction,c=medium.friction,d=medium.friction.no.events),4)
+
+	N <- length(experiments)
+	if (require("rgsl")){
+		cat("not at all parallel\n")
+		print(system.time(Y <- r_gsl_odeiv2_outer(name,experiments,paramG)))
+		cat("mclapply parallel\n")
+		print(system.time(Y <- unlist(mclapply(1:N, function(i) r_gsl_odeiv2_outer(name,experiments[i],paramG)),recursive=FALSE)))
+		if (M<100){
+		for (y in Y){
+		dev.new()
+		plot(t,y[["state"]][2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+		for (k in 1:M) {
+			lines(t,y[["state"]][2,,k],lty=1)
+		}
+		pty=1:M;
+		pty[2:M]<-NA;
+		}
+		}
+	}
+	return(Y)
 }
 
 test.outer.wo.events<-function(){
