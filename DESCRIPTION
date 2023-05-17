@@ -1,6 +1,6 @@
 Package: rgsl
 Title: Solves Ordinary Differential Equations (ODEs) via GSL solvers
-Version: 0.1.3
+Version: 0.1.4
 Authors@R:
     person(given = "Andrei",
            family = "Kramer-Miehe",
