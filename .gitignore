@@ -1,3 +1,7 @@
+# various automatic backup files (these shouldn't even exist here)
+*~
+*.orig
+
 # Prerequisites
 *.d
 
