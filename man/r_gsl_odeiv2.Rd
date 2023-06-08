@@ -7,6 +7,7 @@
 r_gsl_odeiv2(
   name,
   t,
+  t0 = 0,
   y0,
   p,
   events = NULL,

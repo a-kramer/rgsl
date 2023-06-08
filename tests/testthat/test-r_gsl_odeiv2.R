@@ -5,7 +5,7 @@ test_that("plain solver interface works",{
 	comment(model.name)<- so
 	expect_true(file.exists(so))
 	t0  <- 0.0
-	t <- seq(1,13,length.out=120)
+	t <- seq(0.0,13,length.out=120)
 	ny <- 2
 	np <- 3
 	I3 <- diag(1,3,3)
@@ -33,7 +33,7 @@ test_that("experiment solver interface works",{
 	comment(model.name) <- so
 	expect_true(file.exists(so))
 
-	t <- seq(0,13,length.out=120)
+	t <- seq(0.0,13,length.out=120)
 
 	I3 <- diag(1,3,3)
 	I2 <- diag(1,2,2)
@@ -45,17 +45,17 @@ test_that("experiment solver interface works",{
 	param.tf <- affine.transform(
 			length(event.t),I3,c(0,0,0)
 	)
-	no.friction <- list(time=t,parameters=c(1,0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	no.friction <- list(time=t,t0=0.0,parameters=c(1,0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	## experiment 2
 	param.tf <- affine.transform(
 			length(event.t),I3,c(0,0.1,0)
 	)
-	low.friction <- list(time=t,parameters=c(1,1,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	low.friction <- list(time=t,t0=0.0,parameters=c(1,1,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	## experiment 3
 	param.tf <- affine.transform(
 			length(event.t),I3,c(0,0.2,0)
 	)
-	medium.friction <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	medium.friction <- list(time=t,t0=-10.0,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	## experiment 4
 	medium.friction.no.events <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1))
 
@@ -91,7 +91,7 @@ test_that("outer product interface works",{
 	comment(model.name) <- so
 	expect_true(file.exists(so))
 
-	t <- seq(0,13,length.out=120)
+	t <- seq(0.0,13,length.out=120)
 	## 2-dim and 3-dim identity matrix
 	I3 <- diag(1,3,3)
 	I2 <- diag(1,2,2)

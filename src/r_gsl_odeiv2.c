@@ -359,7 +359,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	int i=0,j;
 	double t=t0;
 	double tf,te;
-	int status;
+	int status=GSL_SUCCESS;
 
 	/* initialize t0 values */
 	gsl_vector_memcpy(y,y0);
@@ -375,7 +375,8 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 			apply_tf(event->state,y->data,i);
 			apply_tf(event->par,(double*) sys.params,i);
 			status|=gsl_odeiv2_driver_reset(driver);
-			if (status!=GSL_SUCCESS) fprintf(stderr,"[%s] event %i produced an error: %i.\n",__func__,i,gsl_strerror(status))
+			if (status!=GSL_SUCCESS)
+				fprintf(stderr,"[%s] event %i produced an error: %s.\n",__func__,i,gsl_strerror(status));
 			i++;
 		}
 		if (tf>t) status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
@@ -494,6 +495,8 @@ r_gsl_odeiv2(
 			 &(t.vector),
 			 ev[i],
 			 &(y.matrix));
+		if (status!=GSL_SUCCESS)
+			fprintf(stderr,"[%s] simulation error: %s\n",__func__,gsl_strerror(status));
 		gsl_odeiv2_driver_free(driver);
 		event_free(&(ev[i]));
 	}
@@ -570,7 +573,7 @@ r_gsl_odeiv2_simulate(
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
-		t0 = from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0"));
+		t0 = from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0");
 		ny=length(iv);
 		nt=length(t);
 		if (ny>0 && nt>0 && ny==sys.dimension){
@@ -683,7 +686,7 @@ r_gsl_odeiv2_outer(
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
-		t0 = from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0"));
+		t0 = from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0");
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
