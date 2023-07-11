@@ -12,6 +12,7 @@ model.so <- function(file.c){
 	if (!file.exists(so)){
 		system2("cc",sprintf("%s -o %s '%s' %s",CFLAGS,so,file.c,LIBS))
 	}
+	stopifnot(file.exists(so))
 	return(so)
 }
 
@@ -65,7 +66,16 @@ event.tf <- function(t,state.tf,param.tf){
 
 #' Create a simulation experiment
 #'
-#' 
+#' Creates a list of simulation instructions, with names compatible
+#' with the solver. The transformations can be made using the function
+#' affine.transform().
+#'
+#' @param t time vector
+#' @param y0 initial value of the state variables
+#' @param event.t times at which events happen
+#' @param state.tf state transformation to be applied at times event.t
+#' @param param.tf parameter changes to apply at times event.t
+#' @return a list of simulation experiments
 make.experiment <- function(t,y0,par,event.t=NULL,state.tf=NULL,param.tf=NULL){
 	if (!is.null(event.t)){
 		stopifnot(length(event.t) == dim(state.tf$A)[3])

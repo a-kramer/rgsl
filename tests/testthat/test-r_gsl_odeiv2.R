@@ -1,16 +1,11 @@
-test_that("multiplication works", {
-  expect_equal(2 * 2, 4)
-})
-
-
 test_that("plain solver interface works",{
 	file.c <- rgsl.example()
 	so <- model.so(file.c)
 	model.name <- sub("_gvf.c","",basename(file.c))
 	comment(model.name)<- so
 	expect_true(file.exists(so))
-	
-	t <- seq(0,13,length.out=120)
+	t0  <- 0.0
+	t <- seq(0.0,13,length.out=120)
 	ny <- 2
 	np <- 3
 	I3 <- diag(1,3,3)
@@ -21,7 +16,7 @@ test_that("plain solver interface works",{
 	p <- matrix(c(1,0,0),nrow=np,ncol=N)
 	p[2,]=seq(0,N-1,length.out=N) + rnorm(N,mean=0,sd=0.05);
 
-	y <- r_gsl_odeiv2(model.name,t=t,y0=y0,p=p)
+	y <- r_gsl_odeiv2(model.name,t=t,t0=t0,y0=y0,p=p)
 	expect_type(y,"double")
 	expect_equal(dim(y),c(ny,length(t),N))
 	expect_true(all(is.finite(y)))
@@ -38,7 +33,7 @@ test_that("experiment solver interface works",{
 	comment(model.name) <- so
 	expect_true(file.exists(so))
 
-	t <- seq(0,13,length.out=120)
+	t <- seq(0.0,13,length.out=120)
 
 	I3 <- diag(1,3,3)
 	I2 <- diag(1,2,2)
@@ -50,22 +45,22 @@ test_that("experiment solver interface works",{
 	param.tf <- affine.transform(
 			length(event.t),I3,c(0,0,0)
 	)
-	no.friction <- list(time=t,parameters=c(1,0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	no.friction <- list(time=t,t0=0.0,parameters=c(1,0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	## experiment 2
 	param.tf <- affine.transform(
 			length(event.t),I3,c(0,0.1,0)
 	)
-	low.friction <- list(time=t,parameters=c(1,1,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	low.friction <- list(time=t,t0=0.0,parameters=c(1,1,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	## experiment 3
 	param.tf <- affine.transform(
 			length(event.t),I3,c(0,0.2,0)
 	)
-	medium.friction <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	medium.friction <- list(time=t,t0=-10.0,parameters=c(1,2,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 	## experiment 4
 	medium.friction.no.events <- list(time=t,parameters=c(1,2,0),initial_value=c(0,1))
 
 	experiments=list(a=no.friction,b=low.friction,c=medium.friction,d=medium.friction.no.events)
-	
+
 	N<-length(experiments)
 
 	y <- r_gsl_odeiv2_sim(model.name,experiments)
@@ -79,7 +74,7 @@ test_that("experiment solver interface works",{
 	expect_true(all(is.finite(unlist(y))))
 	expect_gt(max(unlist(y)),0.0)
 	expect_lt(min(unlist(y)),0.0)
-	
+
 	plot(t,y[[1]][["state"]][2,],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
 	for (l in 1:N) {
 		lines(t,y[[l]][["state"]][2,],lty=l)
@@ -96,7 +91,7 @@ test_that("outer product interface works",{
 	comment(model.name) <- so
 	expect_true(file.exists(so))
 
-	t <- seq(0,13,length.out=120)
+	t <- seq(0.0,13,length.out=120)
 	## 2-dim and 3-dim identity matrix
 	I3 <- diag(1,3,3)
 	I2 <- diag(1,2,2)
@@ -106,11 +101,11 @@ test_that("outer product interface works",{
 	state.tf <- affine.transform(length(event.t),I2,c(1,0))
 
 	param.tf <- affine.transform(length(event.t),I3,c(0,0,0))
-	no.friction <- list(time=t,input=c(0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
+	no.friction <- list(time=t,t0=0.0,input=c(0,0),initial_value=c(0,1),events=event.tf(event.t,state.tf,param.tf))
 
 	experiments=list(a=no.friction,b=no.friction)
 	N <- length(experiments)
-	
+
 	Y <- r_gsl_odeiv2_outer(model.name,experiments,paramG)
 	expect_type(Y,"list")
 	expect_length(Y,2)

@@ -6,6 +6,22 @@
 \usage{
 make.experiment(t, y0, par, event.t = NULL, state.tf = NULL, param.tf = NULL)
 }
+\arguments{
+\item{t}{time vector}
+
+\item{y0}{initial value of the state variables}
+
+\item{event.t}{times at which events happen}
+
+\item{state.tf}{state transformation to be applied at times event.t}
+
+\item{param.tf}{parameter changes to apply at times event.t}
+}
+\value{
+a list of simulation experiments
+}
 \description{
-Create a simulation experiment
+Creates a list of simulation instructions, with names compatible
+with the solver. The transformations can be made using the function
+affine.transform().
 }
