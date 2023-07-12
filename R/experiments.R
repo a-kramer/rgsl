@@ -7,7 +7,7 @@
 #' @export
 model.so <- function(file.c){
 	LIBS <- "-lgsl -lgslcblas -lm"
-	CFLAGS <- "-shared -fPIC -Wall -O2"
+	CFLAGS <- "-shared -fPIC -Wall -Wfatal-errors -O2"
 	so <- paste0("./",sub("_gvf[.]c",".so",basename(file.c)))
 	if (!file.exists(so)){
 		system2("cc",sprintf("%s -o %s '%s' %s",CFLAGS,so,file.c,LIBS))
