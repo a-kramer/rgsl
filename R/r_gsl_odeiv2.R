@@ -27,7 +27,7 @@
 #' t <- seq(0,1,length.out=100)
 #' p <- c(1,0,0)
 #' y <- r_gsl_odeiv2("HarmonicOscillator",t,y0,p)
-r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
+r_gsl_odeiv2 <- function(name,t,t0=0,y0,p,events=NULL,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -49,7 +49,7 @@ r_gsl_odeiv2 <- function(name,t,y0,p,events=NULL,abs.tol=1e-6,rel.tol=1e-5,initi
 		stopifnot(all(names(events) %in% colnames(p)))
 	}
 	## this is where the call happens:
-	y <- .Call(odeiv,name,t,y0,p,events,abs.tol,rel.tol,initial.step.size)
+	y <- .Call(odeiv,name,t,t0,y0,p,events,abs.tol,rel.tol,initial.step.size)
 	dimnames(y) <- list(rownames(y0),names(t),colnames(p))
 	return(y)
 }
@@ -145,8 +145,6 @@ r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,init
 	}
 	stopifnot(file.exists(so))
 	stopifnot(is.matrix(p))
-	stopifnot(any(c('outputTimes','time') %in% names(experiments[[1]])))
-	stopifnot(is.double(experiments[[1]]$outputTimes) || is.double(experiments[[1]]$time))
 	y <- .Call(odeiv_outer_e,name,experiments,p,abs.tol,rel.tol,initial.step.size)
 	return(y)
 }
