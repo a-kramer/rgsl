@@ -372,11 +372,16 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 			printf("[%s] a scheduled event occurs at t=%g.\n",__func__,te);
 #endif
 			status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
+			if (status!=GSL_SUCCESS){
+				fprintf(stderr,"[%s] before event %i gsl_odeiv2_driver_apply produced an error: %s.\n",__func__,i,gsl_strerror(status));
+			}
 			apply_tf(event->state,y->data,i);
 			apply_tf(event->par,(double*) sys.params,i);
-			status|=gsl_odeiv2_driver_reset(driver);
-			if (status!=GSL_SUCCESS)
-				fprintf(stderr,"[%s] event %i produced an error: %s.\n",__func__,i,gsl_strerror(status));
+			status=gsl_odeiv2_driver_reset(driver);
+			if (status!=GSL_SUCCESS){
+				fprintf(stderr,"[%s] resetting the system after event %i produced an error: %s.\n",__func__,i,gsl_strerror(status));
+			}
+
 			i++;
 		}
 		if (tf>t) status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
