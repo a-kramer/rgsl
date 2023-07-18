@@ -315,10 +315,11 @@ load_system(
 }
 
 /*This function responds to the status returned by the gsl solvers.*/
-void check_status(int status, /*the returned value from gsl_odeiv2_driver_apply and similar functions*/
-			double current_t, /* the time at which integration stopped*/
-			double target_t, /* the time we tried to reach*/
-			int iteration)/* the iteration at which the error happened */
+void check_status(
+		int status, /*the returned value from gsl_odeiv2_driver_apply and similar functions*/
+		double current_t, /* the time at which integration stopped*/
+		double target_t, /* the time we tried to reach*/
+		int iteration)/* the iteration at which the error happened */
 {
 	int j=iteration;
 	double t=current_t;
@@ -338,9 +339,9 @@ void check_status(int status, /*the returned value from gsl_odeiv2_driver_apply 
 
 
 /* Intergrates the system `sys` using the specified `driver` and
-	 simulation instructions `sim` (an array of structs, one element per
-	 simulation). The results are saved to an hdf5 file and also printed
-	 to standard output. */
+   simulation instructions `sim` (an array of structs, one element per
+   simulation). The results are saved to an hdf5 file and also printed
+   to standard output. */
 int /* error code if any */
 simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
  gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
@@ -374,14 +375,15 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 			status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
 			if (status!=GSL_SUCCESS){
 				fprintf(stderr,"[%s] before event %i gsl_odeiv2_driver_apply produced an error: %s.\n",__func__,i,gsl_strerror(status));
+				return(status);
 			}
 			apply_tf(event->state,y->data,i);
 			apply_tf(event->par,(double*) sys.params,i);
 			status=gsl_odeiv2_driver_reset(driver);
 			if (status!=GSL_SUCCESS){
 				fprintf(stderr,"[%s] resetting the system after event %i produced an error: %s.\n",__func__,i,gsl_strerror(status));
+				return(status);
 			}
-
 			i++;
 		}
 		if (tf>t) status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
@@ -390,6 +392,8 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 		if(status==GSL_SUCCESS){
 			Yout_row = gsl_matrix_row(Yout,j);
 			gsl_vector_memcpy(&(Yout_row.vector),y);
+		} else {
+			return(status);
 		}
 	}
 	gsl_odeiv2_driver_reset(driver);
@@ -439,25 +443,18 @@ r_gsl_odeiv2(
 		N=1;
 		ny=length(y0);
 	}
-#ifdef DEBUG_PRINT
-	printf("[%s] ny=%li, np=%li, N=%li.\n",__func__,ny,np,N);
-#endif
+
 	gsl_vector_view t=gsl_vector_view_array(REAL(AS_NUMERIC(tspan)),nt);
 	gsl_matrix_view initial_value = gsl_matrix_view_array(REAL(AS_NUMERIC(y0)),N,ny);
 	gsl_matrix_view ode_parameter = gsl_matrix_view_array(REAL(AS_NUMERIC(p)),N,np);
 
-	// load system from file
 	jacp dfdp;
 	gsl_odeiv2_system sys = load_system(model_name, model_so, ny, REAL(AS_NUMERIC(p)), &dfdp, NULL,NULL);
 	if (sys.dimension == 0) {
 		fprintf(stderr,"system dimension is «%li», nothing left to do.\n",sys.dimension);
 		return R_NilValue;
 	}
-#ifdef DEBUG_PRINT
-	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
-#endif
 
-	// check whether events are happening during integration:
 	int l;
 	Rdata event_names;
 	event_t **ev=calloc(N,sizeof(event_t*));
@@ -478,6 +475,8 @@ r_gsl_odeiv2(
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata Y = PROTECT(alloc3DArray(REALSXP,ny,nt,N));
+	for (i=0;i<ny*nt*N;i++) REAL(Y)[i]=NA_REAL;
+
 	double *ydata;
 	gsl_vector_view iv_row;
 	size_t nyt=nt*ny;
@@ -500,8 +499,10 @@ r_gsl_odeiv2(
 			 &(t.vector),
 			 ev[i],
 			 &(y.matrix));
-		if (status!=GSL_SUCCESS)
+		if (status!=GSL_SUCCESS){
 			fprintf(stderr,"[%s] simulation error: %s\n",__func__,gsl_strerror(status));
+			break;
+		}
 		gsl_odeiv2_driver_free(driver);
 		event_free(&(ev[i]));
 	}
@@ -546,9 +547,6 @@ r_gsl_odeiv2_simulate(
 	double rel_tol=asReal(relative_tolerance);
 	double h=asReal(initial_step_size);
 	int N=GET_LENGTH(experiments);
-#ifdef DEBUG_PRINT
-	printf("[%s] simulating %i experiments\n",__func__,N);
-#endif
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
@@ -567,14 +565,8 @@ r_gsl_odeiv2_simulate(
 		fprintf(stderr,"[%s] system dimension is «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
-#ifdef DEBUG_PRINT
-	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
-#endif
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-#ifdef DEBUG_PRINT
-		printf("[%s] solving %i of %i.\n",__func__,i,N);
-#endif
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
@@ -588,6 +580,7 @@ r_gsl_odeiv2_simulate(
 			assert(sys.params);
 
 			Y=PROTECT(allocMatrix(REALSXP,ny,nt));
+			for (j=0;j<ny*nt;j++) REAL(Y)[j]=NA_REAL;
 			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y)),nt,ny);
 
 			if (observable){
@@ -600,15 +593,7 @@ r_gsl_odeiv2_simulate(
 				&(initial_value.vector),
 				&(time.vector),ev,&(y.matrix)
 			);
-			assert(status==GSL_SUCCESS);
-#ifdef DEBUG_PRINT
-			printf("[%s] done.\n",__func__);
-#endif
-			fflush(stdout);
 			if (observable) {
-#ifdef DEBUG_PRINT
-				printf("calculating %li function(s):\n",nf);
-#endif
 				for (j=0;j<nt;j++){
 					f=&(REAL(AS_NUMERIC(F))[j*nf]);
 					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
@@ -624,6 +609,7 @@ r_gsl_odeiv2_simulate(
 			UNPROTECT(1); /* yf_list */
 			if (observable) UNPROTECT(1); /* F */
 			UNPROTECT(1); /* Y */
+			if (status!=GSL_SUCCESS) break;
 		}
 	}
 	UNPROTECT(1); /* res_list */
@@ -658,9 +644,6 @@ r_gsl_odeiv2_outer(
 	int N=GET_LENGTH(experiments);
 	size_t np=nrows(parameters);
 	size_t M=ncols(parameters);
-#ifdef DEBUG_PRINT
-	printf("[%s] simulating %i experiment, with %li parameter sets each\n",__func__,N,M);
-#endif
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
@@ -682,11 +665,6 @@ r_gsl_odeiv2_outer(
 		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
-#ifdef DEBUG_PRINT
-	printf("[%s] system dimension: %li\n",__func__,sys.dimension);
-	fflush(stdout);
-#endif
-
 	for (i=0;i<N;i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
@@ -696,9 +674,6 @@ r_gsl_odeiv2_outer(
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
 		p=malloc(sizeof(double)*np_model);
-#ifdef DEBUG_PRINT
-		printf("[%s] solving %i of %i.\n",__func__,i,N);
-#endif
 		if (np_model!= np+nu) {
 			fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
 		}
@@ -709,9 +684,11 @@ r_gsl_odeiv2_outer(
 			initial_value=gsl_vector_view_array(REAL(AS_NUMERIC(iv)),ny);
 			time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 			Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+			for (j=0;j<ny*nt*M;j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
 			if (observable){
 				nf=observable(0,NULL,NULL,NULL);
 				F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+				for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL; /* initialize to NA */
 			}
 			for (k=0;k<M;k++){
 				y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
@@ -726,15 +703,9 @@ r_gsl_odeiv2_outer(
 					ev,
 					&(y.matrix)
 				);
-#ifdef DEBUG_PRINT
-				printf("[%s] done.\n",__func__);
-#endif
 				if (observable) {
-#ifdef DEBUG_PRINT
-					printf("calculating %li functions:\n",nf);
-#endif
 					for (j=0;j<nt;j++){
-						f=REAL(AS_NUMERIC(F))+(0+j*nf+k*nf*nt);
+						f=REAL(F)+(0+j*nf+k*nf*nt);
 						observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 					}
 				}
@@ -751,6 +722,7 @@ r_gsl_odeiv2_outer(
 		UNPROTECT(1); /* yf_list */
 		if (observable) UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
+		if (status!=GSL_SUCCESS) break;
 	}
 	UNPROTECT(1); /* res_list */
 	return res_list;
