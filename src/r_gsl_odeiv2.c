@@ -665,7 +665,7 @@ r_gsl_odeiv2_outer(
 		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
-	for (i=0;i<N;i++){
+	for (i=0; i<N; i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
@@ -684,7 +684,7 @@ r_gsl_odeiv2_outer(
 			initial_value=gsl_vector_view_array(REAL(AS_NUMERIC(iv)),ny);
 			time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 			Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
-			for (j=0;j<ny*nt*M;j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
+			for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
 			if (observable){
 				nf=observable(0,NULL,NULL,NULL);
 				F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
@@ -716,13 +716,20 @@ r_gsl_odeiv2_outer(
 		SET_VECTOR_ELT(yf_list,1,F);
 		set_names(yf_list,yf_names,2);
 		SET_VECTOR_ELT(res_list,i,yf_list);
-		free(p);
+
 		event_free(&ev);
 		gsl_odeiv2_driver_free(driver);
 		UNPROTECT(1); /* yf_list */
 		if (observable) UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
-		if (status!=GSL_SUCCESS) break;
+		if (status!=GSL_SUCCESS){
+			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
+			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
+			free(p);
+			break;
+		} else {
+			free(p);
+		}
 	}
 	UNPROTECT(1); /* res_list */
 	return res_list;
