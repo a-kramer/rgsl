@@ -600,13 +600,11 @@ r_gsl_odeiv2_simulate(
 					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
 			}
-			if (status==GSL_SUCCESS){
-				yf_list=PROTECT(NEW_LIST(2));
-				SET_VECTOR_ELT(yf_list,0,Y);
-				SET_VECTOR_ELT(yf_list,1,F);
-				set_names(yf_list,yf_names,2);
-				SET_VECTOR_ELT(res_list,i,yf_list);
-			}
+			yf_list=PROTECT(NEW_LIST(2));
+			SET_VECTOR_ELT(yf_list,0,Y);
+			SET_VECTOR_ELT(yf_list,1,F);
+			set_names(yf_list,yf_names,2);
+			SET_VECTOR_ELT(res_list,i,yf_list);
 			gsl_odeiv2_driver_free(driver);
 			event_free(&ev);
 			UNPROTECT(1); /* yf_list */
@@ -726,16 +724,14 @@ r_gsl_odeiv2_outer(
 		UNPROTECT(1); /* yf_list */
 		if (observable) UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
-		if (status!=GSL_SUCCESS && error_log){
-			fprintf(error_log,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
-			for (j=0; j<np_model; j++) fprintf(error_log,"%g%s",p[j],(j==np_model-1?"\n":", "));
-			free(p);
-			break;
-		} else {
-			free(p);
+#ifdef DEBUG_PRINT
+		if (status!=GSL_SUCCESS){
+			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
+			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
 		}
+#endif
+		free(p);
 	}
-	fclose(error_log);
 	UNPROTECT(1); /* res_list */
 	return res_list;
 }
