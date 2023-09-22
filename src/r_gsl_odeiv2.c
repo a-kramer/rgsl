@@ -369,19 +369,20 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 		tf=gsl_vector_get(time,j);
 		if (event && i<event->nt && event->time[i] < tf) {
 			te=event->time[i];
-#ifdef DEBUG_PRINT
-			printf("[%s] a scheduled event occurs at t=%g.\n",__func__,te);
-#endif
 			status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
 			if (status!=GSL_SUCCESS){
+#ifdef DEBUG_PRINT
 				fprintf(stderr,"[%s] before event %i gsl_odeiv2_driver_apply produced an error: %s.\n",__func__,i,gsl_strerror(status));
+#endif
 				return(status);
 			}
 			apply_tf(event->state,y->data,i);
 			apply_tf(event->par,(double*) sys.params,i);
 			status=gsl_odeiv2_driver_reset(driver);
 			if (status!=GSL_SUCCESS){
+#ifdef DEBUG_PRINT
 				fprintf(stderr,"[%s] resetting the system after event %i produced an error: %s.\n",__func__,i,gsl_strerror(status));
+#endif
 				return(status);
 			}
 			i++;
@@ -593,7 +594,7 @@ r_gsl_odeiv2_simulate(
 				&(initial_value.vector),
 				&(time.vector),ev,&(y.matrix)
 			);
-			if (observable) {
+			if (observable && status==GSL_SUCCESS) {
 				for (j=0;j<nt;j++){
 					f=&(REAL(AS_NUMERIC(F))[j*nf]);
 					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
@@ -637,7 +638,7 @@ r_gsl_odeiv2_outer(
 {
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
-	int i,j,k,l,status;
+	int i,j,k,l,status=GSL_SUCCESS;
 	double abs_tol=asReal(absolute_tolerance);
 	double rel_tol=asReal(relative_tolerance);
 	double h=asReal(initial_step_size);
@@ -703,7 +704,7 @@ r_gsl_odeiv2_outer(
 					ev,
 					&(y.matrix)
 				);
-				if (observable) {
+				if (observable && status==GSL_SUCCESS) {
 					for (j=0;j<nt;j++){
 						f=REAL(F)+(0+j*nf+k*nf*nt);
 						observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
@@ -716,20 +717,18 @@ r_gsl_odeiv2_outer(
 		SET_VECTOR_ELT(yf_list,1,F);
 		set_names(yf_list,yf_names,2);
 		SET_VECTOR_ELT(res_list,i,yf_list);
-
 		event_free(&ev);
 		gsl_odeiv2_driver_free(driver);
 		UNPROTECT(1); /* yf_list */
 		if (observable) UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
+#ifdef DEBUG_PRINT
 		if (status!=GSL_SUCCESS){
 			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
 			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
-			free(p);
-			break;
-		} else {
-			free(p);
 		}
+#endif
+		free(p);
 	}
 	UNPROTECT(1); /* res_list */
 	return res_list;

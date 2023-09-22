@@ -144,7 +144,7 @@ r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,init
 		comment(name)<-so
 	}
 	stopifnot(file.exists(so))
-	stopifnot(is.matrix(p))
+	if (!is.matrix(p)) p <- as.matrix(p)
 	y <- .Call(odeiv_outer_e,name,experiments,p,abs.tol,rel.tol,initial.step.size)
 	return(y)
 }
