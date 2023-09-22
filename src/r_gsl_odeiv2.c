@@ -666,8 +666,6 @@ r_gsl_odeiv2_outer(
 		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
-	FILE* error_log=fopen("gsl_odeiv2_err.log","w");
-
 	for (i=0; i<N; i++){
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
