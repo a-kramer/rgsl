@@ -351,6 +351,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
  const event_t *event, /*a struct array with scheduled events */
  gsl_matrix *Yout) /* time span vector: initial time, increment, final time */
 {
+	gsl_set_error_handler_off();
 	int nt=time->size;
 	int ny=(int) sys.dimension;
 	gsl_vector *y=gsl_vector_alloc(ny);
@@ -423,6 +424,7 @@ r_gsl_odeiv2(
  Rdata relative_tolerance, /* relative tolerance for GSL's solver */
  Rdata initial_step_size) /* initial guess for the step size */
 {
+	gsl_set_error_handler_off();
 	int i,j;
 	double abs_tol=asReal(absolute_tolerance);
 	double rel_tol=asReal(relative_tolerance);
@@ -540,6 +542,7 @@ r_gsl_odeiv2_simulate(
  Rdata relative_tolerance, /* relative tolerance for GSL's solver */
  Rdata initial_step_size) /* initial guess for the step size */
 {
+	gsl_set_error_handler_off();
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,status;
@@ -636,6 +639,7 @@ r_gsl_odeiv2_outer(
  Rdata relative_tolerance, /* relative tolerance for GSL's solver */
  Rdata initial_step_size) /* initial guess for the step size */
 {
+	gsl_set_error_handler_off();
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,k,l,status=GSL_SUCCESS;
