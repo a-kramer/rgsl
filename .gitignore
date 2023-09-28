@@ -1,3 +1,8 @@
+# Metadata and unnecessary Backup files
+*~
+*.orig
+.DS_Store
+
 # Prerequisites
 *.d
 
