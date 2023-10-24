@@ -337,19 +337,95 @@ void check_status(
 	}
 }
 
+/* appends the given state to the allocated result buffers */
+int append_state(){
+
+}
+
+/* Intergrates the system `sys` using the specified `driver` and
+   simulation instructions `sim` (an array of structs, one element per
+   simulation). The solver picks the output times */
+int /* error code if any, otherwise GSL_SUCCESS */
+simulate_timeseries_fine_alloc(const gsl_odeiv2_system sys, /* the system to integrate */
+	gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
+	double t0, /* the initial time: y(t0) = y0 */
+	const gsl_vector *y0, /* initial value */
+	double tf, /* final time of entire simulation */
+	const event_t *event, /*a struct array with scheduled events */
+	double *Yout, /* return value (a matrix: ny×M, dense in ny), allocated here */
+	double *tout) /* return time vector (starts with t0) with length M, allocated here */
+{
+	gsl_set_error_handler_off();
+	int ny=(int) sys.dimension;
+	gsl_vector *y=gsl_vector_alloc(ny);
+	int i=0,j;
+	double t=t0;
+	double te;
+	int status=GSL_SUCCESS;
+	size_t MaxColY=500;
+	size_t m=0;
+	tout=malloc((sizeof *tout)*MaxColY);
+	Yout=malloc((sizeof *Yout)*ny*MaxColY);
+	/* initialize t0 values */
+	gsl_vector_memcpy(y,y0);
+
+	for (j = 0, i = 0; j < nt; j++){
+		// reallocate when we run out of columns to put results in
+		if (m==MaxColY) {
+			MaxColY += 100;
+			tout = realloc(tout,(sizeof *tout) * MaxColY);
+			Yout = realloc(Yout,(sizeof *Yout) * ny * MaxColY);
+		}
+		tout[m]=t;
+		
+		if (event && i<event->nt && event->time[i] < tf) {
+			te=event->time[i];
+			while (t<te){
+				
+				status=gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->s, &sys, &t, te, &(driver->h), y->data);
+				if (status!=GSL_SUCCESS){
+					// output is initial conditions, with error code from solver
+					tout = realloc(tout,(sizeof *tout));
+					Yout = realloc(Yout,(sizeof *Yout)*ny);
+					return(status);
+				} else {
+					memcpy(Yout[m*(y->size)],y->data,(sizeof *Yout)*(y->size));
+				}
+			}
+			apply_tf(event->state,y->data,i);
+			apply_tf(event->par,(double*) sys.params,i);
+			status=gsl_odeiv2_driver_reset(driver);
+			if (status!=GSL_SUCCESS){
+				return(status);
+			}
+			i++;
+		}
+		if (tf>t) status=gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->step, &sys, &t, te, &h, y->data);
+		//report any error codes to the R user
+		check_status(status,t,tf,j);
+		if(status==GSL_SUCCESS){
+			Yout_row = gsl_matrix_row(Yout,j);
+			gsl_vector_memcpy(&(Yout_row.vector),y);
+		} else {
+			return(status);
+		}
+	}
+	gsl_odeiv2_driver_reset(driver);
+	return status;
+}
 
 /* Intergrates the system `sys` using the specified `driver` and
    simulation instructions `sim` (an array of structs, one element per
    simulation). The results are saved to an hdf5 file and also printed
    to standard output. */
-int /* error code if any */
+int /* error code if any, otherwise GSL_SUCCESS */
 simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
- gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
- double t0, /* the initial time: y(t0) = y0 */
- const gsl_vector *y0, /* initial value */
- const gsl_vector *time, /* a vector of time-points */
- const event_t *event, /*a struct array with scheduled events */
- gsl_matrix *Yout) /* time span vector: initial time, increment, final time */
+	gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
+	double t0, /* the initial time: y(t0) = y0 */
+	const gsl_vector *y0, /* initial value */
+	const gsl_vector *time, /* a vector of time-points */
+	const event_t *event, /*a struct array with scheduled events */
+	gsl_matrix *Yout) /* (OUT) return vaule, pre-allocated */
 {
 	gsl_set_error_handler_off();
 	int nt=time->size;
