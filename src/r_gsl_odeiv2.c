@@ -26,6 +26,10 @@ typedef SEXP Rdata;
 /* these two function types could be different, but currently aren't */
 typedef int(*jacp)(double, const double [], double *, void *);
 typedef int(*func)(double, const double [], double *, void *);
+typedef int(*jac)(double, const double [], double *, void *);
+typedef int(*jacFunc)(double, const double [], double *, void *);
+typedef int(*jacpFunc)(double, const double [], double *, void *);
+
 typedef int(*def_par)(double, void *);
 typedef int (*vf) (double t, const double y[], double dydt[], void * params);
 typedef enum {SCALE,DIAG,MATVEC} tf_t;
@@ -694,6 +698,19 @@ r_gsl_odeiv2_simulate(
 	}
 	UNPROTECT(1); /* res_list */
 	return res_list;
+}
+
+int sensitivityApproximation(double t0, gsl_vector *t, gsl_matrix *Y, gsl_matrix *F, jac jacY, jacp jacP, funcJac jacFY, funcJacp jacFP)
+{
+	int i,j,k;
+	int m=t->size;
+	int n=Y->size2;
+	if (m != Y->size1) fprintf(stderr,"[%s] t has length %li, but Y has %li rows.\n",__func__,m,Y->size1);
+
+	for (j=0;j<m;i++){
+		
+	}
+	return GSL_SUCCESS;
 }
 
 
