@@ -708,7 +708,7 @@ r_gsl_odeiv2_outer(
 					ev,
 					&(y.matrix)
 				);
-				if (observable && status==GSL_SUCCESS) {
+				if (observable && F && status==GSL_SUCCESS) {
 					for (j=0;j<nt;j++){
 						f=REAL(F)+(0+j*nf+k*nf*nt);
 						observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
