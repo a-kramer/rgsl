@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -23,15 +24,33 @@
  */
 typedef SEXP Rdata;
 
-/* these two function types could be different, but currently aren't */
-typedef int(*jacp)(double, const double [], double *, void *);
-typedef int(*func)(double, const double [], double *, void *);
-typedef int(*jac)(double, const double [], double *, void *);
-typedef int(*jacFunc)(double, const double [], double *, void *);
-typedef int(*jacpFunc)(double, const double [], double *, void *);
+/* an ODE model y'=f(t,y,p) will have a name, and several functions, prefixed with
+ * that name, e.g.: ${name}_vf().
+ * The possible suffixes are:
+ * _vf          the ODE right-hand-side function f (vector-field)
+ * _jac         the y-jacobian df/dy (with respect to y)
+ * _jacp        the p-jacobian df/dp (with respect to p)
+ * _init        sets the initial values of the state variables y
+ * _default     sets the default parameter values p
+ * _func        output functions F (observable values)
+ * _funcJac     output function y-jacobian dF/dy
+ * _funcJacp    output function p-jacobian dF/dp
+ * all of these functions return integer error codes and GSL_SUCCESS on success (0).
+ *
+ * We load these functions by name from a shared library (.so) and
+ * give them new, generic names, where we replace the model's name with "ODE".
+ * 
+ */
 
-typedef int(*def_par)(double, void *);
-typedef int (*vf) (double t, const double y[], double dydt[], void * params);
+int (*ODE_vf)(double t, const double y_[], double f_[], void *par);
+int (*ODE_jac)(double t, const double y_[], double *jac_, double *dfdt_, void *par);
+int (*ODE_jacp)(double t, const double y_[], double *jacp_, double *dfdt_, void *par);
+int (*ODE_func)(double t, const double y_[], double *func_, void *par);
+int (*ODE_funcJac)(double t, const double y_[], double *funcJac_, void *par);
+int (*ODE_funcJacp)(double t, const double y_[], double *funcJacp_, void *par);
+int (*ODE_default)(double t, void *par);
+int (*ODE_init)(double t, double *y_, void *par);
+
 typedef enum {SCALE,DIAG,MATVEC} tf_t;
 
 typedef struct {
@@ -218,32 +237,12 @@ void event_free(event_t **ev){
 	}
 }
 
-/*This function allocates memory and concatenates two strings in that
-	memory. It is used to make function names (this is for loading the model
-	functions by name from a shared library). The model function names
-	have this pattern: `MODEL_vf`, `MODEL_jac`, `MODEL_jacp`.*/
-char* /* string with model_name and suffix (free after loading the function) */
-model_function(const char *model_name, /* the base name of the model */
- const char *suffix) /* suffix, usually `"_vf"` or `"_jac"` */
-{
-	if (!model_name) return NULL;
-	size_t size=(strlen(model_name)+strlen(suffix)+1);
-	char *f=malloc(sizeof(char)*size);
-	strcat(strcpy(f,model_name),suffix);
-#ifdef DEBUG_PRINT
-	fprintf(stdout,"[%s] «%s»\n",__func__,f);
-#endif
-	return f;
-}
-
-
 /* Loads a function from an `.so` file, using `dlsym()`.
 	 Optionally, this
 	 function frees the storage assosiated with the name of the
 	 function.*/
 void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` */
- char *name, /* function to be loaded from file */
- int opt) /* whether to call `free()` on `name` (either: `KEEP_ON_SUCCESS` or `FREE_ON_SUCCESS`). */
+ char *name) /* function to be loaded from file */
 {
   if (!lib || !name) return NULL;
 	void *symbol=dlsym(lib,name);
@@ -251,9 +250,6 @@ void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` 
 #ifdef DEBUG_PRINT
 		fprintf(stderr,"[%s] «%s» loaded successfully.\n",__func__,name);
 #endif
-		if (opt==FREE_ON_SUCCESS){
-			free(name);
-		}
 	}else{
 		fprintf(stderr,"[%s] loading of «%s» failed: slerror was «%s»\n",__func__,name,dlerror());
 		return NULL;
@@ -265,56 +261,67 @@ void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` 
 /* Loads the ODE system from an `.so` file, the file is given by name,
 	 the returned structure is intended for the `gsl_odeiv2` library of
 	 solvers. The jacobian dfdx is loaded alongside the right hand side;
-	 `gsl_odeiv2_system` has no slot for the parameter derivative `dfdp`,
-	 this is returned as a function pointer instead. */
+	 `gsl_odeiv2_system`. Other model functions (_jacp, _func, _init,
+	 _default, funcJac, funcJacp) are assigned to global variables. */
 gsl_odeiv2_system /* the system structure, see gsl documentation. */
 load_system(
  const char *model_name, /* the name of the model, function names will be inferred from that: model_name_vf, model_name_jac, etc. */
- const char *model_so, /* the path to the shared library that contains the model. */
- size_t n, /* number of state variables, 0 for auto-detection */
- double *p, /* default parameter vector */
- jacp *dfdp, /*[out] additional return value: a pointer to the parameter derivative (matrix) function.*/
- func *F, /* [out] observables for this model (output functions) */
- def_par *DefParFunc) /* [out] function that returns default parameters */
+ const char *model_so) /* the path to the shared library that contains the model. */
 {
 	void *lib=dlopen(model_so,RTLD_LAZY);
 	void *dfdy;
 	gsl_odeiv2_system sys={NULL,NULL,0,NULL};
 	vf f;
 	//dfdp=malloc(sizeof(jacp*));
-	char *symbol_name; // symbol name in .so
+	size_t n,l;
+	size_t m=strlen(model_name);
+	char *symbol_name=malloc(m+32); // symbol name in .so
+	char *suffix=mempcpy(symbol_name,model_name,m);
+	*suffix='\0';
+
 	if (lib){
-		symbol_name=model_function(model_name,"_vf");
-		f=(vf) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
-		symbol_name=model_function(model_name,"_jac");
-		dfdy=load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
-		if (dfdp){
-			symbol_name=model_function(model_name,"_jacp");
-			*dfdp = (jacp) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
-		}
-		symbol_name=model_function(model_name,"_func");
-		if (symbol_name && F){
-			*F = (func) load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
-		}
-		symbol_name=model_function(model_name,"_default");
-		if (symbol_name && DefParFunc){
-			*DefParFunc = load_or_warn(lib,symbol_name,FREE_ON_SUCCESS);
-		}
+		*((char*) mempcpy(suffix,"_vf",3))='\0';
+		ODE_vf=load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_jac",4))='\0';
+		ODE_jac=load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_jacp",5))='\0';
+		ODE_jacp = load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_func",5))='\0';
+		ODE_func = load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_funcJac",8))='\0';
+		ODE_funcJac = load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_funcJacp",9))='\0';
+		ODE_funcJacp = load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_default",8))='\0';
+		ODE_default = load_or_warn(lib,symbol_name);
+
+		*((char*) mempcpy(suffix,"_init",5))='\0';
+		ODE_init = load_or_warn(lib,symbol_name);
 	} else {
 		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,model_so,dlerror());
 		return sys;
 	}
-	if (!n) n=f(0,NULL,NULL,NULL);
+	n=ODE_vf(0,NULL,NULL,NULL);
+	l=ODE_default(0,NULL);
 #ifdef DEBUG_PRINT
 	fprintf(stderr,"[%s] vf function returns %li components.\n",__func__,n);
 #endif
-	sys.function=f;
-	sys.jacobian=dfdy;
+	sys.function=ODE_vf;
+	sys.jacobian=ODE_jac;
 	sys.dimension=n;
+	double *p=malloc(sizeof(double)*l);
+	ODE_default(0,p);
 	sys.params=p;
 #ifdef DEBUG_PRINT
 	fprintf(stderr,"[%s] ode system created.\n",__func__); fflush(stderr);
 #endif
+	free(symbol_name);
 	return sys;
 }
 
@@ -339,83 +346,6 @@ void check_status(
 		error("[%s] time_point %li: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
 		break;
 	}
-}
-
-/* appends the given state to the allocated result buffers */
-int append_state(){
-
-}
-
-/* Intergrates the system `sys` using the specified `driver` and
-   simulation instructions `sim` (an array of structs, one element per
-   simulation). The solver picks the output times */
-int /* error code if any, otherwise GSL_SUCCESS */
-simulate_timeseries_fine_alloc(const gsl_odeiv2_system sys, /* the system to integrate */
-	gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
-	double t0, /* the initial time: y(t0) = y0 */
-	const gsl_vector *y0, /* initial value */
-	double tf, /* final time of entire simulation */
-	const event_t *event, /*a struct array with scheduled events */
-	double *Yout, /* return value (a matrix: ny×M, dense in ny), allocated here */
-	double *tout) /* return time vector (starts with t0) with length M, allocated here */
-{
-	gsl_set_error_handler_off();
-	int ny=(int) sys.dimension;
-	gsl_vector *y=gsl_vector_alloc(ny);
-	int i=0,j;
-	double t=t0;
-	double te;
-	int status=GSL_SUCCESS;
-	size_t MaxColY=500;
-	size_t m=0;
-	tout=malloc((sizeof *tout)*MaxColY);
-	Yout=malloc((sizeof *Yout)*ny*MaxColY);
-	/* initialize t0 values */
-	gsl_vector_memcpy(y,y0);
-
-	for (j = 0, i = 0; j < nt; j++){
-		// reallocate when we run out of columns to put results in
-		if (m==MaxColY) {
-			MaxColY += 100;
-			tout = realloc(tout,(sizeof *tout) * MaxColY);
-			Yout = realloc(Yout,(sizeof *Yout) * ny * MaxColY);
-		}
-		tout[m]=t;
-		
-		if (event && i<event->nt && event->time[i] < tf) {
-			te=event->time[i];
-			while (t<te){
-				
-				status=gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->s, &sys, &t, te, &(driver->h), y->data);
-				if (status!=GSL_SUCCESS){
-					// output is initial conditions, with error code from solver
-					tout = realloc(tout,(sizeof *tout));
-					Yout = realloc(Yout,(sizeof *Yout)*ny);
-					return(status);
-				} else {
-					memcpy(Yout[m*(y->size)],y->data,(sizeof *Yout)*(y->size));
-				}
-			}
-			apply_tf(event->state,y->data,i);
-			apply_tf(event->par,(double*) sys.params,i);
-			status=gsl_odeiv2_driver_reset(driver);
-			if (status!=GSL_SUCCESS){
-				return(status);
-			}
-			i++;
-		}
-		if (tf>t) status=gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->step, &sys, &t, te, &h, y->data);
-		//report any error codes to the R user
-		check_status(status,t,tf,j);
-		if(status==GSL_SUCCESS){
-			Yout_row = gsl_matrix_row(Yout,j);
-			gsl_vector_memcpy(&(Yout_row.vector),y);
-		} else {
-			return(status);
-		}
-	}
-	gsl_odeiv2_driver_reset(driver);
-	return status;
 }
 
 /* Intergrates the system `sys` using the specified `driver` and
@@ -531,8 +461,7 @@ r_gsl_odeiv2(
 	gsl_matrix_view initial_value = gsl_matrix_view_array(REAL(AS_NUMERIC(y0)),N,ny);
 	gsl_matrix_view ode_parameter = gsl_matrix_view_array(REAL(AS_NUMERIC(p)),N,np);
 
-	jacp dfdp;
-	gsl_odeiv2_system sys = load_system(model_name, model_so, ny, REAL(AS_NUMERIC(p)), &dfdp, NULL,NULL);
+	gsl_odeiv2_system sys = load_system(model_name, model_so);
 	if (sys.dimension == 0) {
 		fprintf(stderr,"system dimension is «%li», nothing left to do.\n",sys.dimension);
 		return R_NilValue;
@@ -643,7 +572,7 @@ r_gsl_odeiv2_simulate(
 	event_t *ev=NULL;
 	jacp dfdp=NULL;
 	func observable=NULL;
-	gsl_odeiv2_system sys = load_system(model_name, model_so, 0, NULL, &dfdp, &observable, NULL);
+	gsl_odeiv2_system sys = load_system(model_name, model_so);
 	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */
 		fprintf(stderr,"[%s] system dimension is «%li».\n",__func__,sys.dimension);
@@ -667,20 +596,18 @@ r_gsl_odeiv2_simulate(
 			for (j=0;j<ny*nt;j++) REAL(Y)[j]=NA_REAL;
 			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y)),nt,ny);
 
-			if (observable){
-				nf=observable(0,NULL,NULL,NULL);
-				F=PROTECT(allocMatrix(REALSXP,nf,nt));
-			}
+			nf=ODE_func(0,NULL,NULL,NULL);
+			F=PROTECT(allocMatrix(REALSXP,nf,nt));
 			status=simulate_timeseries(sys,
 				driver,
 				REAL(AS_NUMERIC(t0))[0],
 				&(initial_value.vector),
 				&(time.vector),ev,&(y.matrix)
 			);
-			if (observable && status==GSL_SUCCESS) {
+			if (status==GSL_SUCCESS) {
 				for (j=0;j<nt;j++){
 					f=&(REAL(AS_NUMERIC(F))[j*nf]);
-					observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+					ODE_func(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
 			}
 			yf_list=PROTECT(NEW_LIST(2));
@@ -700,16 +627,60 @@ r_gsl_odeiv2_simulate(
 	return res_list;
 }
 
-int sensitivityApproximation(double t0, gsl_vector *t, gsl_matrix *Y, gsl_matrix *F, jac jacY, jacp jacP, funcJac jacFY, funcJacp jacFP)
+int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, gsl_matrix *F, double *dYdp, double *dFdp)
 {
 	int i,j,k;
 	int m=t->size;
 	int n=Y->size2;
+	int l=p->size;
+	int f=F->size2;
+	double tj,delta_t;
+	gsl_vector_view row,col;
+	gsl_matrix *A=gsl_matrix_alloc(n,n);
+	gsl_matrix *LU=gsl_matrix_alloc(n,n);
+	gsl_matrix *B=gsl_matrix_alloc(n,l);
+	gsl_matrix *E=gsl_matrix_alloc(n,n);
+	gsl_matrix *S_AB=gsl_matrix_alloc(n,l);
+	gsl_permutation *P=gsl_permutation_alloc(n);
+	gsl_matrix *FA=gsl_matrix_alloc(f,n);
+	gsl_matrix *FB=gsl_matrix_alloc(f,l);
+	gsl_matrix_view SY, SF; /* sensitivity matrices (array-views) */
+	int sign;
+	const double *y;
 	if (m != Y->size1) fprintf(stderr,"[%s] t has length %li, but Y has %li rows.\n",__func__,m,Y->size1);
 
 	for (j=0;j<m;i++){
-		
+		tj=gsl_vector_get(t,j);
+		delta_t=tj-t0;
+		t0=tj;
+		y=Y[n*j];
+		ODE_jac(tj,y,A->data,NULL,p->data);                                           /* A <- df/dy */
+		ODE_jacp(tj,y,B->data,NULL,p->data);                                          /* B <- df/dp */
+		gsl_matrix_memcpy(LU,A);                                                      /* LU <- A */
+		gsl_linalg_LU_decomp(LU, P, &sign);                                           /* make P*A = L*U */
+		for (k=0;k<l;k++){
+			col=gsl_matrix_column(B,k);
+			gsl_linalg_LU_svx(LU, P, &(col.vector));                                    /* B <- A\B*/
+		}
+		gsl_matrix_scale(A,delta_t);                                                  /* A <- (df/dy)*(t-t0)*/
+		gsl_linalg_exponential_ss(A,E,GSL_PREC_SINGLE);                               /* E <- exp(A*(t-t0))*/
+		SY=gsl_matrix_view_array(dYdp+n*l*j,n,l);
+		gsl_matrix_memcpy(S_AB,&SY.matrix);
+		gsl_matrix_add(S_AB,B);
+		gsl_matrix_memcpy(&(SY.matrix),B);
+		gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, E, S_AB, -1.0, &(SY.matrix)); /* S is now the piece-wise-constant approximation of the sensitivity */
+		/**/
+		ODE_funcJac(tj,y,FA->data,p->data);
+		ODE_funcJacp(tj,y,dFdp+f*l*j,p->data);
+		SF=gsl_matrix_view_array(dFdp+f*l*j,f,l);                                     /* SF <- jacFP (initial value) */
+		gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, FA, &(SY.matrix), 1.0, &(SF.matrix));
 	}
+	gsl_matrix_free(A);
+	gsl_matrix_free(B);
+	gsl_matrix_free(E);
+	gsl_matrix_free(LU);
+	gsl_matrix_free(S_AB);
+	gsl_permutation_free(P);
 	return GSL_SUCCESS;
 }
 
