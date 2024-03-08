@@ -14,8 +14,6 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <Rdefines.h>
-#define FREE_ON_SUCCESS 1
-#define KEEP_ON_SUCCESS 2
 #define MATCH 0
 #define NO_DIFFERENCE 0
 /* SEXP stands for S-Expression, and it can be any R data object (or
@@ -39,9 +37,8 @@ typedef SEXP Rdata;
  *
  * We load these functions by name from a shared library (.so) and
  * give them new, generic names, where we replace the model's name with "ODE".
- * 
+ *
  */
-
 int (*ODE_vf)(double t, const double y_[], double f_[], void *par);
 int (*ODE_jac)(double t, const double y_[], double *jac_, double *dfdt_, void *par);
 int (*ODE_jacp)(double t, const double y_[], double *jacp_, double *dfdt_, void *par);
@@ -719,16 +716,17 @@ r_gsl_odeiv2_outer(
 	SET_NAMES(res_list,GET_NAMES(experiments));
 	Rdata yf_list, input, Y, F, iv, t, t0;
 	const char *yf_names[2]={"state","func"};
+	const char *sens_names[2]={"stateSensitivity","funcSensitivity"};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf, nu;
 	event_t *ev=NULL;
-	double *p, *f;
-	jacp dfdp=NULL;
-	func observable=NULL;
-	def_par default_parameters=NULL;
-	gsl_odeiv2_system sys = load_system(model_name, model_so, 0, NULL, &dfdp, &observable, &default_parameters);
-	int np_model = default_parameters(0,NULL);
+	double *f;
+	gsl_vector_view p;
+	Rdata SY, SF;
+	Rdata sy_k, sf_k;
+	gsl_odeiv2_system sys = load_system(model_name, model_so); /* also sets ODE_*() functions */
+	int np_model = ODE_default(0,NULL);
 	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */
 		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
@@ -742,11 +740,10 @@ r_gsl_odeiv2_outer(
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
-		p=malloc(sizeof(double)*np_model);
 		if (np_model!= np+nu) {
 			fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
 		}
-		if (p && nu) memcpy(p+np,REAL(AS_NUMERIC(input)),nu*sizeof(double));
+		if (nu) memcpy(sys.param + np, REAL(AS_NUMERIC(input)), nu*sizeof(double));
 		ny=length(iv);
 		nt=length(t);
 		if (ny>0 && nt>0 && ny==sys.dimension){
@@ -754,15 +751,15 @@ r_gsl_odeiv2_outer(
 			time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 			Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
 			for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
-			if (observable){
-				nf=observable(0,NULL,NULL,NULL);
-				F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
-				for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL; /* initialize to NA */
-			}
+			nf=ODE_func(0,NULL,NULL,NULL);
+			F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+			SY=PROTECT(NEW_LIST(M));
+			SF=PROTECT(NEW_LIST(M));
+			for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL; /* initialize to NA */
 			for (k=0;k<M;k++){
 				y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
-				memcpy(p,REAL(AS_NUMERIC(parameters))+np*k,np*sizeof(double));
-				sys.params = p;
+				memcpy(sys.param, REAL(AS_NUMERIC(parameters))+np*k, np*sizeof(double));
+				p=gsl_vector_view_array(sys.param,np_model);
 				status=simulate_timeseries(
 					sys,
 					driver,
@@ -772,12 +769,16 @@ r_gsl_odeiv2_outer(
 					ev,
 					&(y.matrix)
 				);
-				if (observable && status==GSL_SUCCESS) {
+				if (status==GSL_SUCCESS) {
+					sy_k=PROTECT(alloc3DArray(REALSXP,ny,np_model,nt));
+					sf_k=PROTECT(alloc3DArray(REALSXP,nf,np_model,nt));
+					sensitivityApproximation(&(time.vector),&(y.matrix))
 					for (j=0;j<nt;j++){
 						f=REAL(F)+(0+j*nf+k*nf*nt);
-						observable(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+						ODE_func(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 					}
 				}
+				SET_VECTOR_ELT(SY,k,)
 			}
 		}
 		yf_list=PROTECT(NEW_LIST(2));
