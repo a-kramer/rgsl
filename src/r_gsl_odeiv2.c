@@ -268,8 +268,6 @@ load_system(
 	void *lib=dlopen(model_so,RTLD_LAZY);
 	void *dfdy;
 	gsl_odeiv2_system sys={NULL,NULL,0,NULL};
-	vf f;
-	//dfdp=malloc(sizeof(jacp*));
 	size_t n,l;
 	size_t m=strlen(model_name);
 	char *symbol_name=malloc(m+32); // symbol name in .so
@@ -567,8 +565,6 @@ r_gsl_odeiv2_simulate(
 	gsl_matrix_view y;
 	size_t ny, nt, nf;
 	event_t *ev=NULL;
-	jacp dfdp=NULL;
-	func observable=NULL;
 	gsl_odeiv2_system sys = load_system(model_name, model_so);
 	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */
@@ -615,7 +611,7 @@ r_gsl_odeiv2_simulate(
 			gsl_odeiv2_driver_free(driver);
 			event_free(&ev);
 			UNPROTECT(1); /* yf_list */
-			if (observable) UNPROTECT(1); /* F */
+			UNPROTECT(1); /* F */
 			UNPROTECT(1); /* Y */
 			if (status!=GSL_SUCCESS) break;
 		}
@@ -624,13 +620,13 @@ r_gsl_odeiv2_simulate(
 	return res_list;
 }
 
-int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, gsl_matrix *F, double *dYdp, double *dFdp)
+int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, double *dYdp, double *dFdp)
 {
 	int i,j,k;
 	int m=t->size;
 	int n=Y->size2;
 	int l=p->size;
-	int f=F->size2;
+	int f=ODE_func(0,NULL,NULL,NULL);
 	double tj,delta_t;
 	gsl_vector_view row,col;
 	gsl_matrix *A=gsl_matrix_alloc(n,n);
@@ -644,13 +640,13 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 	gsl_matrix_view SY, SF; /* sensitivity matrices (array-views) */
 	int sign;
 	const double *y;
-	if (m != Y->size1) fprintf(stderr,"[%s] t has length %li, but Y has %li rows.\n",__func__,m,Y->size1);
+	if (m != Y->size1) fprintf(stderr,"[%s] t has length %i, but Y has %li rows.\n",__func__,m,Y->size1);
 
 	for (j=0;j<m;i++){
 		tj=gsl_vector_get(t,j);
 		delta_t=tj-t0;
 		t0=tj;
-		y=Y[n*j];
+		y=gsl_matrix_ptr(Y,j,0);
 		ODE_jac(tj,y,A->data,NULL,p->data);                                           /* A <- df/dy */
 		ODE_jacp(tj,y,B->data,NULL,p->data);                                          /* B <- df/dp */
 		gsl_matrix_memcpy(LU,A);                                                      /* LU <- A */
@@ -714,9 +710,9 @@ r_gsl_odeiv2_outer(
 	gsl_odeiv2_driver *driver;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
-	Rdata yf_list, input, Y, F, iv, t, t0;
-	const char *yf_names[2]={"state","func"};
-	const char *sens_names[2]={"stateSensitivity","funcSensitivity"};
+	Rdata yf_list, input, Y, F, iv, t;
+	double t0;
+	const char *yf_names[4]={"state","func","stateSensitivity","funcSensitivity"};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt, nf, nu;
@@ -736,14 +732,14 @@ r_gsl_odeiv2_outer(
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
-		t0 = from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0");
+		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0")))[0];
 		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
 		input = from_list(VECTOR_ELT(experiments,i),"input");
 		nu=(input && input!=R_NilValue)?length(input):0;
 		if (np_model!= np+nu) {
 			fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
 		}
-		if (nu) memcpy(sys.param + np, REAL(AS_NUMERIC(input)), nu*sizeof(double));
+		if (nu) memcpy(sys.params + np, REAL(AS_NUMERIC(input)), nu*sizeof(double));
 		ny=length(iv);
 		nt=length(t);
 		if (ny>0 && nt>0 && ny==sys.dimension){
@@ -758,38 +754,42 @@ r_gsl_odeiv2_outer(
 			for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL; /* initialize to NA */
 			for (k=0;k<M;k++){
 				y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
-				memcpy(sys.param, REAL(AS_NUMERIC(parameters))+np*k, np*sizeof(double));
-				p=gsl_vector_view_array(sys.param,np_model);
+				memcpy(sys.params, REAL(AS_NUMERIC(parameters))+np*k, np*sizeof(double));
+				p=gsl_vector_view_array(sys.params,np_model);
 				status=simulate_timeseries(
 					sys,
 					driver,
-					REAL(AS_NUMERIC(t0))[0],
+					t0,
 					&(initial_value.vector),
 					&(time.vector),
 					ev,
 					&(y.matrix)
 				);
 				if (status==GSL_SUCCESS) {
-					sy_k=PROTECT(alloc3DArray(REALSXP,ny,np_model,nt));
-					sf_k=PROTECT(alloc3DArray(REALSXP,nf,np_model,nt));
-					sensitivityApproximation(&(time.vector),&(y.matrix))
 					for (j=0;j<nt;j++){
 						f=REAL(F)+(0+j*nf+k*nf*nt);
 						ODE_func(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 					}
+					sy_k=PROTECT(alloc3DArray(REALSXP,ny,np_model,nt));
+					sf_k=PROTECT(alloc3DArray(REALSXP,nf,np_model,nt));
+					sensitivityApproximation(t0,&(time.vector),sys.params,&(y.matrix),REAL(sy_k),REAL(sf_k));
 				}
-				SET_VECTOR_ELT(SY,k,)
+				SET_VECTOR_ELT(SY,k,sy_k);
+				SET_VECTOR_ELT(SF,k,sf_k);
 			}
+			UNPROTECT(2);
 		}
-		yf_list=PROTECT(NEW_LIST(2));
+		yf_list=PROTECT(NEW_LIST(4));
 		SET_VECTOR_ELT(yf_list,0,Y);
 		SET_VECTOR_ELT(yf_list,1,F);
+		SET_VECTOR_ELT(yf_list,2,SY);
+		SET_VECTOR_ELT(yf_list,3,SF);
 		set_names(yf_list,yf_names,2);
 		SET_VECTOR_ELT(res_list,i,yf_list);
 		event_free(&ev);
 		gsl_odeiv2_driver_free(driver);
 		UNPROTECT(1); /* yf_list */
-		if (observable) UNPROTECT(1); /* F */
+		UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
 #ifdef DEBUG_PRINT
 		if (status!=GSL_SUCCESS){
@@ -797,7 +797,6 @@ r_gsl_odeiv2_outer(
 			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
 		}
 #endif
-		free(p);
 	}
 	UNPROTECT(1); /* res_list */
 	return res_list;

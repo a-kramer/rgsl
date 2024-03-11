@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<VectorField Name="HarmonicOscillator" Description="y'' = F(t) - k*y - c*v">
+  <Parameter Name="k" DefaultValue="0.5"/>
+  <Parameter Name="c" DefaultValue="0.0"/>
+  <Parameter Name="F" DefaultValue="0.0"/>
+  <StateVariable Name="v" DefaultInitialCondition="0.0" Formula="F-k*y-c*v"/>
+  <StateVariable Name="y" DefaultInitialCondition="1.0" Formula="v"/>
+  <Function Name="norm" Formula="sqrt(y*y+v*v)"/>
+</VectorField>
