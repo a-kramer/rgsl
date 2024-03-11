@@ -642,7 +642,7 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 	gsl_matrix *S_AB=gsl_matrix_alloc(n,l);
 	gsl_permutation *P=gsl_permutation_alloc(n);
 	gsl_matrix *FA=gsl_matrix_alloc(f,n);
-	gsl_matrix_view SY, SF; /* sensitivity matrices (array-views) */
+	gsl_matrix_view SY0,SY, SF; /* sensitivity matrices (array-views) */
 	int sign;
 	clock_t ct1,ct2,ct3,ct4;
 	const double *y;
@@ -667,8 +667,13 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 		gsl_linalg_exponential_ss(A,E,GSL_PREC_SINGLE);                               /* E <- exp(A*(t-t0))*/
 		ct3=clock();
 		SY=gsl_matrix_view_array(dYdp+n*l*j,n,l);
-		gsl_matrix_memcpy(S_AB,&SY.matrix);
-		gsl_matrix_add(S_AB,B);
+		if (j==0){
+			gsl_matrix_memcpy(S_AB,B);
+		} else {
+			SY0=gsl_matrix_view_array(dYdp+n*l*(j-1),n,l);
+			gsl_matrix_memcpy(S_AB,&SY0.matrix);
+			gsl_matrix_add(S_AB,B);
+		}
 		gsl_matrix_memcpy(&(SY.matrix),B);
 		gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, E, S_AB, -1.0, &(SY.matrix)); /* S is now the piece-wise-constant approximation of the sensitivity */
 		/**/
@@ -798,7 +803,7 @@ r_gsl_odeiv2_outer(
 		SET_VECTOR_ELT(yf_list,1,F);
 		SET_VECTOR_ELT(yf_list,2,SY);
 		SET_VECTOR_ELT(yf_list,3,SF);
-		set_names(yf_list,yf_names,2);
+		set_names(yf_list,yf_names,4);
 		SET_VECTOR_ELT(res_list,i,yf_list);
 		event_free(&ev);
 		gsl_odeiv2_driver_free(driver);
