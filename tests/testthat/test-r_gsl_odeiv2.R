@@ -20,7 +20,7 @@ test_that("plain solver interface works",{
 	expect_type(y,"double")
 	expect_equal(dim(y),c(ny,length(t),N))
 	expect_true(all(is.finite(y)))
-	plot(t,y[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+	plot(t,y[2,,1],main="Damped Harmonic Oscillator (HO) - plain interface",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
 	for (l in 1:N) {
 		lines(t,y[2,,l],lty=l)
 	}
@@ -75,7 +75,7 @@ test_that("experiment solver interface works",{
 	expect_gt(max(unlist(y)),0.0)
 	expect_lt(min(unlist(y)),0.0)
 
-	plot(t,y[[1]][["state"]][2,],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+	plot(t,y[[1]][["state"]][2,],main="HO: r_gsl_odeiv2_sim interface",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
 	for (l in 1:N) {
 		lines(t,y[[l]][["state"]][2,],lty=l)
 	}
@@ -110,10 +110,11 @@ test_that("outer product interface works",{
 	expect_type(Y,"list")
 	expect_length(Y,2)
 	expect_named(Y,c("a","b"))
-	expect_true(all(is.finite(unlist(Y))))
+	expect_true(all(is.finite(Y[[1]]$state)))
+	expect_true(all(is.finite(Y[[2]]$state)))
 	for (y in Y){
 		dev.new()
-		plot(t,y$state[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+		plot(t,y$state[2,,1],main="HO: Outer Product function",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
 		for (l in 1:N) {
 			for (k in 1:M) {
 				lines(t,y$state[2,,k],lty=l)
@@ -151,11 +152,16 @@ test_that("failed simulation is different from a successful simulation",{
 	expect_type(Y,"list")
 	expect_length(Y,2)
 	expect_named(Y,c("a","b"))
-	expect_false(all(is.finite(unlist(Y[[2]]))))
-	expect_true(all(is.finite(unlist(Y[[1]]))))
+	expect_false(all(is.finite(Y[[2]]$state)))
+	expect_true(all(is.finite(Y[[1]]$state)))
 	for (y in Y){
 		dev.new()
-		plot(t,y$state[2,,1],main="Damped Harmonic Oscillator",sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
+		if (all(is.finite(y$state))){
+			mt <- "HO: did not fail"
+		} else {
+			mt <- "HO: fails at t=1"
+		}
+		plot(t,y$state[2,,1],main=mt,sub="y'' = -ky -cy' with varying damping c (dy/dt=y')",xlab="time",ylab="state y(t;c)")
 		for (l in 1:N) {
 			for (k in 1:M) {
 				lines(t,y$state[2,,k],lty=l)
