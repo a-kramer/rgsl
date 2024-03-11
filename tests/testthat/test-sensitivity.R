@@ -26,7 +26,6 @@ test_that("sensitivity is correct",{
 	expect_equal(names(y),c('state','func','stateSensitivity','funcSensitivity'))
 	sState <- y$stateSensitivity
 	sFunc <- y$funcSensitivity
-	print(sState[[1]])
 	expect_true(is.list(sState))
 	expect_true(is.list(sFunc))
 	expect_length(sState,M)
@@ -39,7 +38,7 @@ test_that("sensitivity is correct",{
 	for (j in seq(nt)){
 	 predict_y_p2[,j] <- y$state[,j,1] + sState[[1]][,seq(l),j] %*% Delta
 	}
-	expect_lt(norm(true_y_p2 - predict_y_p2,"2"),1.0)
+	expect_lt(norm(true_y_p2 - predict_y_p2,"2"),5e-1)
 
 	predict_f_p2 <- matrix(y$func[,,1],1,nt)
 	true_f_p2 <- matrix(y$func[,,2],1,nt)
@@ -47,7 +46,7 @@ test_that("sensitivity is correct",{
 		sf <- matrix(sFunc[[1]][,seq(l),j],1,l)
 		predict_f_p2[,j] <- y$func[,j,1] + sf %*% Delta
 	}
-	expect_lt(norm(true_f_p2 - predict_f_p2,"2"),1.0)
+	expect_lt(norm(true_f_p2 - predict_f_p2,"2"),5e-1)
 	plot(t_,true_f_p2,main="prediction of dots via funcSensitivity",xlab='t',ylab='func',pch=1)
 	lines(t_,predict_f_p2,lty=1)
 	lines(t_,y$func[,,1],lty=2)
