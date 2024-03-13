@@ -626,7 +626,7 @@ r_gsl_odeiv2_simulate(
 	return res_list;
 }
 
-int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, double *dYdp, double *dFdp)
+int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, double *dYdp, double *dFdp, double *fisherInformation)
 {
 	int i,j,k;
 	int m=t->size;
@@ -664,7 +664,7 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 		}
 		gsl_matrix_scale(A,delta_t);                                                  /* A <- (df/dy)*(t-t0)*/
 		ct2=clock();
-		gsl_linalg_exponential_ss(A,E,GSL_PREC_SINGLE);                               /* E <- exp(A*(t-t0))*/
+		gsl_linalg_exponential_ss(A,E,GSL_PREC_DOUBLE);                               /* E <- exp(A*(t-t0))*/
 		ct3=clock();
 		SY=gsl_matrix_view_array(dYdp+n*l*j,n,l);
 		if (j==0){
