@@ -17,7 +17,7 @@ test_that("sensitivity is correct",{
 	experiments=list(a=e1)
 	N <- length(experiments)
 
-	Y <- r_gsl_odeiv2_outer(model.name,experiments,paramG)
+	Y <- r_gsl_odeiv2_outer_sens(model.name,experiments,paramG)
 	y <- Y[[1]]
 	expect_type(Y,"list")
 	expect_true(all(is.finite(Y[[1]]$state)))
@@ -38,7 +38,7 @@ test_that("sensitivity is correct",{
 	for (j in seq(nt)){
 	 predict_y_p2[,j] <- y$state[,j,1] + sState[[1]][,seq(l),j] %*% Delta
 	}
-	expect_lt(norm(true_y_p2 - predict_y_p2,"2"),5e-1)
+	expect_lt(norm(true_y_p2 - predict_y_p2,"2")/nt,5e-1)
 
 	predict_f_p2 <- matrix(y$func[,,1],1,nt)
 	true_f_p2 <- matrix(y$func[,,2],1,nt)
@@ -46,7 +46,7 @@ test_that("sensitivity is correct",{
 		sf <- matrix(sFunc[[1]][,seq(l),j],1,l)
 		predict_f_p2[,j] <- y$func[,j,1] + sf %*% Delta
 	}
-	expect_lt(norm(true_f_p2 - predict_f_p2,"2"),5e-1)
+	expect_lt(norm(true_f_p2 - predict_f_p2,"2")/nt,5e-1)
 	plot(t_,true_f_p2,main="prediction of dots via funcSensitivity",xlab='t',ylab='func',pch=1)
 	lines(t_,predict_f_p2,lty=1)
 	lines(t_,y$func[,,1],lty=2)

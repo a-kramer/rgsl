@@ -626,7 +626,7 @@ r_gsl_odeiv2_simulate(
 	return res_list;
 }
 
-int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, double *dYdp, double *dFdp, double *fisherInformation)
+int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, double *dYdp, double *dFdp)
 {
 	int i,j,k;
 	int m=t->size;
@@ -694,7 +694,6 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 	return GSL_SUCCESS;
 }
 
-
 /* This prgram loads an ODE model, with functions compatible with `gsl_odeiv2`
 	(see odeiv2 documentation on the GSL webpage). It
 	 simulates the model for each entry in a list of named items, each
@@ -706,6 +705,224 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 */
 Rdata /* the trajectories as a list (same size as experiments) */
 r_gsl_odeiv2_outer(
+ Rdata modelName, /* a string */
+ Rdata experiments, /* a list of simulation experiments */
+ Rdata parameters, /* a matrix of parameterization columns*/
+ Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
+ Rdata relative_tolerance, /* relative tolerance for GSL's solver */
+ Rdata initial_step_size) /* initial guess for the step size */
+{
+	gsl_set_error_handler_off();
+	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
+	const char* model_name=CHAR(STRING_ELT(modelName,0));
+	int i,j,k,l,status=GSL_SUCCESS;
+	double abs_tol=asReal(absolute_tolerance);
+	double rel_tol=asReal(relative_tolerance);
+	double h=asReal(initial_step_size);
+	int N=GET_LENGTH(experiments);
+	size_t np=nrows(parameters);
+	size_t M=ncols(parameters);
+	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+	gsl_odeiv2_driver *driver;
+	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
+	SET_NAMES(res_list,GET_NAMES(experiments));
+	Rdata yf_list, input, Y, iv, t;
+	double t0;
+	const char *yf_names[1]={"state"};
+	gsl_vector_view initial_value, time;
+	gsl_matrix_view y;
+	size_t ny, nt, nf, nu;
+	event_t *ev=NULL;
+	double *f;
+	gsl_vector_view p;
+	gsl_odeiv2_system sys = load_system(model_name, model_so); /* also sets ODE_*() functions */
+	if (ODE_default==NULL || ODE_init==NULL)
+		fprintf(stderr,"[%s] loading model has failed.\n",__func__);
+	int np_model = ODE_default(0,NULL);
+	if (sys.dimension == 0) {
+		UNPROTECT(1); /* res_list */
+		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
+		return R_NilValue;
+	}
+	for (i=0; i<N; i++){
+		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
+		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
+		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
+		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0")))[0];
+		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
+		input = from_list(VECTOR_ELT(experiments,i),"input");
+		nu=(input && input!=R_NilValue)?length(input):0;
+		if (np_model!= np+nu) {
+			fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
+		}
+		p=gsl_vector_view_array(sys.params,np_model);
+		if (nu) memcpy((double*) sys.params + np, REAL(AS_NUMERIC(input)), nu*sizeof(double));
+		ny=length(iv);
+		nt=length(t);
+		if (ny==0 || nt==0 || ny!=sys.dimension) break;
+		initial_value=gsl_vector_view_array(REAL(AS_NUMERIC(iv)),ny);
+		time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
+		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+		for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
+		for (k=0;k<M;k++){
+			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
+			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+np*k, np*sizeof(double));
+			status=simulate_timeseries(
+				sys,
+				driver,
+				t0,
+				&(initial_value.vector),
+				&(time.vector),
+				ev,
+				&(y.matrix)
+			);
+		}
+		yf_list=PROTECT(NEW_LIST(1));
+		SET_VECTOR_ELT(yf_list,0,Y);
+		set_names(yf_list,yf_names,1);
+		SET_VECTOR_ELT(res_list,i,yf_list);
+		event_free(&ev);
+		gsl_odeiv2_driver_free(driver);
+		UNPROTECT(1); /* yf_list */
+		UNPROTECT(1); /* Y */
+#ifdef DEBUG_PRINT
+		if (status!=GSL_SUCCESS){
+			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
+			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
+		}
+#endif
+	} // experiments: 0 to N-1
+	UNPROTECT(1); /* res_list */
+	return res_list;
+}
+
+
+/* This prgram loads an ODE model, with functions compatible with `gsl_odeiv2`
+	(see odeiv2 documentation on the GSL webpage). It
+	 simulates the model for each entry in a list of named items, each
+	 describing a single initial value problem (`y0`, `t`, parameters `p`, events).
+	 ```
+	 y'=f(y,t;p) y0=y(t[0])
+	 ```
+	 This function is parallel in the list of supplied experiments.
+*/
+Rdata /* the trajectories as a list (same size as experiments) */
+r_gsl_odeiv2_outer_func(
+ Rdata modelName, /* a string */
+ Rdata experiments, /* a list of simulation experiments */
+ Rdata parameters, /* a matrix of parameterization columns*/
+ Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
+ Rdata relative_tolerance, /* relative tolerance for GSL's solver */
+ Rdata initial_step_size) /* initial guess for the step size */
+{
+	gsl_set_error_handler_off();
+	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
+	const char* model_name=CHAR(STRING_ELT(modelName,0));
+	int i,j,k,l,status=GSL_SUCCESS;
+	double abs_tol=asReal(absolute_tolerance);
+	double rel_tol=asReal(relative_tolerance);
+	double h=asReal(initial_step_size);
+	int N=GET_LENGTH(experiments);
+	size_t np=nrows(parameters);
+	size_t M=ncols(parameters);
+	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+	gsl_odeiv2_driver *driver;
+	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
+	SET_NAMES(res_list,GET_NAMES(experiments));
+	Rdata yf_list, input, Y, F, iv, t;
+	double t0;
+	const char *yf_names[4]={"state","func"};
+	gsl_vector_view initial_value, time;
+	gsl_matrix_view y;
+	size_t ny, nt, nf, nu;
+	event_t *ev=NULL;
+	double *f;
+	gsl_vector_view p;
+	gsl_odeiv2_system sys = load_system(model_name, model_so); /* also sets ODE_*() functions */
+	if (ODE_default==NULL || ODE_init==NULL || ODE_func==NULL)
+		fprintf(stderr,"[%s] loading model has failed.\n",__func__);
+	int np_model = ODE_default(0,NULL);
+	if (sys.dimension == 0) {
+		UNPROTECT(1); /* res_list */
+		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
+		return R_NilValue;
+	}
+	for (i=0; i<N; i++){
+		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
+		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
+		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
+		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0")))[0];
+		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
+		input = from_list(VECTOR_ELT(experiments,i),"input");
+		nu=(input && input!=R_NilValue)?length(input):0;
+		if (np_model!= np+nu) {
+			fprintf(stderr,"[%s] number of parameters given (np=%li + nu=%li) does not agree with the supplied model (%i).\n",__func__,np,nu,np_model);
+		}
+		p=gsl_vector_view_array(sys.params,np_model);
+		if (nu) memcpy((double*) sys.params + np, REAL(AS_NUMERIC(input)), nu*sizeof(double));
+		ny=length(iv);
+		nt=length(t);
+		if (ny==0 || nt==0 || ny!=sys.dimension) break;
+		initial_value=gsl_vector_view_array(REAL(AS_NUMERIC(iv)),ny);
+		time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
+		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+		for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
+		nf=ODE_func(0,NULL,NULL,NULL);
+		F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
+		for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL;   /* initialize to NA */
+		for (k=0;k<M;k++){
+			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
+			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+np*k, np*sizeof(double));
+			status=simulate_timeseries(
+				sys,
+				driver,
+				t0,
+				&(initial_value.vector),
+				&(time.vector),
+				ev,
+				&(y.matrix)
+			);
+			if (status==GSL_SUCCESS) {
+				for (j=0;j<nt;j++){
+					f=REAL(F)+(0+j*nf+k*nf*nt);
+					ODE_func(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
+				}
+			}
+		}
+		yf_list=PROTECT(NEW_LIST(2));
+		SET_VECTOR_ELT(yf_list,0,Y);
+		SET_VECTOR_ELT(yf_list,1,F);
+		set_names(yf_list,yf_names,2);
+		SET_VECTOR_ELT(res_list,i,yf_list);
+		event_free(&ev);
+		gsl_odeiv2_driver_free(driver);
+		UNPROTECT(1); /* yf_list */
+		UNPROTECT(1); /* F */
+		UNPROTECT(1); /* Y */
+#ifdef DEBUG_PRINT
+		if (status!=GSL_SUCCESS){
+			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
+			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
+		}
+#endif
+	} // experiments: 0 to N-1
+	UNPROTECT(1); /* res_list */
+	return res_list;
+}
+
+/* This prgram loads an ODE model, with functions compatible with `gsl_odeiv2`
+	(see odeiv2 documentation on the GSL webpage). It
+	 simulates the model for each entry in a list of named items, each
+	 describing a single initial value problem (`y0`, `t`, parameters `p`, events).
+	 ```
+	 y'=f(y,t;p) y0=y(t[0])
+	 ```
+	 This function is parallel in the list of supplied experiments.
+*/
+Rdata /* the trajectories as a list (same size as experiments) */
+r_gsl_odeiv2_outer_sens(
  Rdata modelName, /* a string */
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters, /* a matrix of parameterization columns*/
@@ -739,7 +956,7 @@ r_gsl_odeiv2_outer(
 	Rdata SY, SF;
 	Rdata sy_k, sf_k;
 	gsl_odeiv2_system sys = load_system(model_name, model_so); /* also sets ODE_*() functions */
-	if (ODE_default==NULL || ODE_init==NULL || ODE_func==NULL || ODE_funcJac==NULL)
+	if (ODE_default==NULL || ODE_init==NULL || ODE_func==NULL || ODE_funcJac==NULL || ODE_funcJacp==NULL)
 		fprintf(stderr,"[%s] loading model has failed.\n",__func__);
 	int np_model = ODE_default(0,NULL);
 	if (sys.dimension == 0) {
