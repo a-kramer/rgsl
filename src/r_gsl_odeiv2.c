@@ -747,9 +747,7 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 		total_ct_dgemm[0]+=ct_dgemm[0];
 		total_ct_dgemm[1]+=ct_dgemm[1];
 	}
-	fprintf(stderr,"expm\tsvx\tLU\tdgemm\n");
-	fprintf(stderr,"----\t---\t--\t-----\n");
-	fprintf(stderr,"%li\t%li\t%li\t%li\n",total_ct_expm, total_ct_svx, total_ct_LU, total_ct_dgemm[0]+total_ct_dgemm[1]);
+	fprintf(stderr,"%li\t%li\t%li\t%li\t",total_ct_expm, total_ct_svx, total_ct_LU, total_ct_dgemm[0]+total_ct_dgemm[1]);
 	fprintf(stderr,"%g\t%g\t%g\t%g\n",total_ct_expm/(double) CLOCKS_PER_SEC, total_ct_svx/(double) CLOCKS_PER_SEC, total_ct_LU/(double) CLOCKS_PER_SEC, total_ct_dgemm[0]/(double) CLOCKS_PER_SEC+ total_ct_dgemm[1]/(double) CLOCKS_PER_SEC);
 	return GSL_SUCCESS;
 }
@@ -1072,6 +1070,8 @@ r_gsl_odeiv2_outer_sens(
 					f=REAL(F)+(0+j*nf+k*nf*nt);
 					ODE_func(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
+				fprintf(stderr,"expm\tsvx\tLU\tdgemm\texpm/s\tsvx/s\tLU/s\tdgemm/s\n"); // sensitivityApproximation
+				fprintf(stderr,"----\t---\t--\t-----\t------\t-----\t----\t-------\n"); // will print times
 				sensitivityApproximation(t0,&(time.vector),&(p.vector),&(y.matrix),REAL(sy_k),REAL(sf_k),saMem);
 			}
 			SET_VECTOR_ELT(SY,k,sy_k);
