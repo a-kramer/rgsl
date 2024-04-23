@@ -45,8 +45,10 @@ parameter set p\link{,k}.
 
 The model may have output functions that model observable
 quantities of a system, the c-source can include a function with a
-name ending in "_func" (e.g. mymodel.so with\preformatted{int mymodel_func(double t, double y[], double fout[], void *p)
-}
+name ending in "_func" (e.g. mymodel.so with
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{int mymodel_func(double t, double y[], double fout[], void *p)
+}\if{html}{\out{</div>}}
 
 where fout will contain the output-function values after the call).
 }

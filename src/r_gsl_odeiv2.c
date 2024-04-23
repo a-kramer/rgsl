@@ -689,6 +689,8 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 	gsl_matrix_view SY0,SY, SF; /* sensitivity matrices (array-views) */
 	int sign;
 	clock_t ct1,ct2,ct3,ct4;
+	clock_t ct_expm, ct_svx, ct_LU, ct_dgemm[2];
+	clock_t total_ct_expm=0, total_ct_svx=0, total_ct_LU=0, total_ct_dgemm[2]={0,0};
 	const double *y;
 	if (m != Y->size1) fprintf(stderr,"[%s] t has length %i, but Y has %li rows.\n",__func__,m,Y->size1);
 
@@ -701,14 +703,20 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 		ODE_jac(tj,y,A->data,NULL,p->data);                                           /* A <- df/dy */
 		ODE_jacp(tj,y,B->data,NULL,p->data);                                          /* B <- df/dp */
 		gsl_matrix_memcpy(LU,A);                                                      /* LU <- A */
+		ct_LU = clock();
 		gsl_linalg_LU_decomp(LU, P, &sign);                                           /* make P*A = L*U */
+		ct_LU = clock() - ct_LU;
+		ct_svx=clock();
 		for (k=0;k<l;k++){
 			col=gsl_matrix_column(B,k);
 			gsl_linalg_LU_svx(LU, P, &(col.vector));                                    /* B <- A\B*/
 		}
+		ct_svx=clock()-ct_svx;
 		gsl_matrix_scale(A,delta_t);                                                  /* A <- (df/dy)*(t-t0)*/
 		ct2=clock();
+		ct_expm=clock();
 		gsl_linalg_exponential_ss(A,E,GSL_PREC_SINGLE);                               /* E <- exp(A*(t-t0))*/
+		ct_expm=clock()-ct_expm;
 		ct3=clock();
 		SY=gsl_matrix_view_array(dYdp+n*l*j,n,l);
 		if (j==0){
@@ -719,17 +727,30 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 			gsl_matrix_add(S_AB,B);
 		}
 		gsl_matrix_memcpy(&(SY.matrix),B);
+		ct_dgemm[0]=clock();
 		gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, E, S_AB, -1.0, &(SY.matrix)); /* S is now the piece-wise-constant approximation of the sensitivity */
+		ct_dgemm[0]=clock()-ct_dgemm[0];
 		/**/
 		ODE_funcJac(tj,y,FA->data,p->data);
 		ODE_funcJacp(tj,y,dFdp+f*l*j,p->data);
 		SF=gsl_matrix_view_array(dFdp+f*l*j,f,l);                                     /* SF <- jacFP (initial value) */
+		ct_dgemm[1]=clock();
 		gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, FA, &(SY.matrix), 1.0, &(SF.matrix));
+		ct_dgemm[1]=clock()-ct_dgemm[1];
 		ct4=clock();
 #ifdef DEBUG_PRINT
 		fprintf(stderr,"[%s] timePoint %i of %i: %g s (%g s for matrix exponential).\n",__func__,j,m,(ct4-ct1)/((double) CLOCKS_PER_SEC),(ct3-ct2)/((double) CLOCKS_PER_SEC));
 #endif
+		total_ct_expm+=ct_expm;
+		total_ct_svx+=ct_svx;
+		total_ct_LU+=ct_LU;
+		total_ct_dgemm[0]+=ct_dgemm[0];
+		total_ct_dgemm[1]+=ct_dgemm[1];
 	}
+	fprintf(stderr,"expm\tsvx\tLU\tdgemm\n");
+	fprintf(stderr,"----\t---\t--\t-----\n");
+	fprintf(stderr,"%li\t%li\t%li\t%li\n",total_ct_expm, total_ct_svx, total_ct_LU, total_ct_dgemm[0]+total_ct_dgemm[1]);
+	fprintf(stderr,"%g\t%g\t%g\t%g\n",total_ct_expm/(double) CLOCKS_PER_SEC, total_ct_svx/(double) CLOCKS_PER_SEC, total_ct_LU/(double) CLOCKS_PER_SEC, total_ct_dgemm[0]/(double) CLOCKS_PER_SEC+ total_ct_dgemm[1]/(double) CLOCKS_PER_SEC);
 	return GSL_SUCCESS;
 }
 
