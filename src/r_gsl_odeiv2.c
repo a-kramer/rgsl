@@ -1020,6 +1020,9 @@ r_gsl_odeiv2_outer_sens(
 	int ny = sys.dimension;
 	struct sensApproxMem saMem = sensApproxMemAlloc(ny,np_model,nf);
 
+	fprintf(stderr,"expm\tsvx\tLU\tdgemm\texpm/s\tsvx/s\tLU/s\tdgemm/s\n"); // sensitivityApproximation
+	fprintf(stderr,"----\t---\t--\t-----\t------\t-----\t----\t-------\n"); // will print times
+
 	for (i=0; i<N; i++){
 		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
 		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
@@ -1070,8 +1073,6 @@ r_gsl_odeiv2_outer_sens(
 					f=REAL(F)+(0+j*nf+k*nf*nt);
 					ODE_func(gsl_vector_get(&(time.vector),j),gsl_matrix_ptr(&(y.matrix),j,0),f,sys.params);
 				}
-				fprintf(stderr,"expm\tsvx\tLU\tdgemm\texpm/s\tsvx/s\tLU/s\tdgemm/s\n"); // sensitivityApproximation
-				fprintf(stderr,"----\t---\t--\t-----\t------\t-----\t----\t-------\n"); // will print times
 				sensitivityApproximation(t0,&(time.vector),&(p.vector),&(y.matrix),REAL(sy_k),REAL(sf_k),saMem);
 			}
 			SET_VECTOR_ELT(SY,k,sy_k);
