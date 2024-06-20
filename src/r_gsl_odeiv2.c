@@ -708,7 +708,7 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 	int l=p->size;
 	int f=ODE_func(0,NULL,NULL,NULL);
 	double tj,delta_t;
-	gsl_vector_view col;
+	gsl_vector_view col, diag;
 	gsl_matrix *A=M.A;
 	gsl_matrix *LU=M.LU;
 	gsl_matrix *B=M.B;
@@ -733,6 +733,10 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 		ODE_jac(tj,y,A->data,NULL,p->data);                                           /* A <- df/dy */
 		ODE_jacp(tj,y,B->data,NULL,p->data);                                          /* B <- df/dp */
 		gsl_matrix_memcpy(LU,A);                                                      /* LU <- A */
+		// dirty hack .. maybe this will work better?
+		diag = gsl_matrix_diagonal(A);
+		gsl_vector_add_constant(&(diag.vector),-1e-9);
+		// .. dirty hack
 		ct_LU = clock();
 		gsl_linalg_LU_decomp(LU, P, &sign);                                           /* make P*A = L*U */
 		ct_LU = clock() - ct_LU;
