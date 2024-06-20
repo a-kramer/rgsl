@@ -669,6 +669,36 @@ void sensApproxMemFree(struct sensApproxMem M){
 	if (M.FA) gsl_matrix_free(M.FA);
 }
 
+void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
+ gsl_matrix *Jf, /* the jacobian at t=tf */
+ double ti, /* initial time of the interval (left bondary) */
+ double tf,/* final time of the interval (right boundary) */
+ double *phi) /* return buffer */
+{
+  double s=0.5*(tf-ti);
+  size_t ny=Ji->size1;
+  int i,n=3;
+  gsl_matrix *V=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *W=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I1(tf;ti) = 0.5*(tf-ti)*(Jf+Ji)
+  gsl_matrix_view PHI=gsl_matrix_view_array(phi,ny,ny);
+  gsl_matrix_set_identity(&PHI.matrix);
+  // I1
+  gsl_matrix_memcpy(I1,Jf);
+  gsl_matrix_add(I1,Ji);
+  gsl_matrix_scale(I1,s);
+  gsl_matrix_set_identity(W);
+  for (i=0;i<n;i++){
+    gsl_matrix_set_identity(V);
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
+    gsl_matrix_memcpy(W,V);
+  }
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, &PHI.matrix);
+
+  gsl_matrix_free(I1);
+  gsl_matrix_free(V);
+  gsl_matrix_free(W);
+}
 
 int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix *Y, double *dYdp, double *dFdp, struct sensApproxMem M)
 {
