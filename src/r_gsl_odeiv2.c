@@ -735,7 +735,7 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 		gsl_matrix_memcpy(LU,A);                                                      /* LU <- A */
 		// dirty hack .. maybe this will work better?
 		diag = gsl_matrix_diagonal(A);
-		gsl_vector_add_constant(&(diag.vector),-1e-9);
+		gsl_vector_add_constant(&(diag.vector),-1e-9); // all eigenvalues should be negative, if some are close to zero, we force them
 		// .. dirty hack
 		ct_LU = clock();
 		gsl_linalg_LU_decomp(LU, P, &sign);                                           /* make P*A = L*U */
