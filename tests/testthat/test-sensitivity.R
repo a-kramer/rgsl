@@ -11,7 +11,8 @@ test_that("sensitivity is correct",{
 	I2 <- diag(1,2,2)
 	M <- 2 # arbitrary number of random parameter vectors
 	l <- 2 # number of parameters
-	paramG <- matrix(rnorm(l*M,mean=c(3.0,0.5),sd=c(0.1,0.01)),nrow=l,ncol=M)
+	ny <- 2
+	paramG <- matrix(rnorm(l*M,mean=c(3.0,0.5),sd=c(0.3,0.03)),nrow=l,ncol=M)
 	e1 <- list(time=t_,t0=0.0,input=0.0,initial_value=c(0.0,1.0))
 
 	experiments=list(a=e1)
@@ -41,14 +42,22 @@ test_that("sensitivity is correct",{
 	expect_lt(norm(true_y_p2 - predict_y_p2,"2")/nt,5e-1)
 
 	predict_f_p2 <- matrix(y$func[,,1],1,nt)
+	predict_y_p2 <- matrix(y$state[,,1],ny,nt)
 	true_f_p2 <- matrix(y$func[,,2],1,nt)
 	for (j in seq(nt)){
+		sy <- matrix(sState[[1]][,seq(l),j],ny,l)
 		sf <- matrix(sFunc[[1]][,seq(l),j],1,l)
 		predict_f_p2[,j] <- y$func[,j,1] + sf %*% Delta
+		predict_y_p2[,j] <- y$state[,j,1] + sy %*% Delta
 	}
 	expect_lt(norm(true_f_p2 - predict_f_p2,"2")/nt,5e-1)
 	plot(t_,true_f_p2,main="prediction of dots via funcSensitivity",xlab='t',ylab='func',pch=1)
 	lines(t_,predict_f_p2,lty=1)
 	lines(t_,y$func[,,1],lty=2)
+	legend('bottomright',c('true values','predicted','basis of prediction'),lty=c(NA,1,2),pch=c(1,NA,NA))
+	dev.new()
+	plot(t_,true_y_p2[1,],main="prediction of dots via stateSensitivity",xlab='t',ylab='state 1',pch=1)
+	lines(t_,predict_y_p2[1,],lty=1)
+	lines(t_,y$state[1,,1],lty=2)
 	legend('bottomright',c('true values','predicted','basis of prediction'),lty=c(NA,1,2),pch=c(1,NA,NA))
 })
