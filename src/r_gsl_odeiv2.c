@@ -50,7 +50,7 @@ int (*ODE_funcJac)(double t, const double y_[], double *funcJac_, void *par);
 int (*ODE_funcJacp)(double t, const double y_[], double *funcJacp_, void *par);
 int (*ODE_default)(double t, void *par);
 int (*ODE_init)(double t, double *y_, void *par);
-
+int (*ODE_event)(double t, double *y_, void *par, int EventLabel, double dose);
 
 void transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double tf, gsl_matrix *phi);
 
@@ -65,9 +65,15 @@ typedef struct {
 	gsl_vector *y; /* result vector */
 } affine_tf;
 
+enum event_type {affine_tf_event, model_func_event};
 typedef struct {
+	enum event_type type;
+	int *label;
 	int nt;
+	int nL;
+	int nDose;
 	double *time;
+	double *dose;
 	affine_tf *state;
 	affine_tf *par;
 } event_t;
@@ -215,14 +221,29 @@ event_t* event_from_R(Rdata E){
 	int j;
 	Rdata tf=from_list(E,"tf");
 	Rdata time = from_list(E,"time");
-	if (tf == R_NilValue || time == R_NilValue) return NULL;
-	Rdata state_tf=from_list(tf,"state");
-	Rdata param_tf=from_list(tf,"param");
+	Rdata label = from_list(E,"label");
+	Rdata dose = from_list(E,"dose");
+	if (time == R_NilValue) return NULL;
 	event_t *event=malloc(sizeof(event_t));
-	event->state=affine_transformation(from_list(state_tf,"A"),from_list(state_tf,"b"));
-	event->par=affine_transformation(from_list(param_tf,"A"),from_list(param_tf,"b"));
-
+	if (label != R_NilValue){
+		event->nL = length(label);
+		event->label = INTEGER(AS_INTEGER(label));
+		event->dose = REAL(AS_NUMERIC(dose));
+		event->nDose = length(dose);
+		event->type = model_func_event;
+	} else if (tf != R_NilValue){
+		Rdata state_tf=from_list(tf,"state");
+		Rdata param_tf=from_list(tf,"param");
+		event->state=affine_transformation(from_list(state_tf,"A"),from_list(state_tf,"b"));
+		event->par=affine_transformation(from_list(param_tf,"A"),from_list(param_tf,"b"));
+		event->type=affine_tf_event;
+	} else {
+		fprintf(stderr,"[%s] unknown type of event.\n",__func__);
+	}
 	int lt=length(time);
+	if (event->type == model_func_event && lt != event->nL){
+		fprintf(stderr,"[%s] event time vector and event label vector must be the same length for this type of event. (%i != %i)\n",__func__,lt,event->nL);
+	}
 	event->time = REAL(AS_NUMERIC(time));
 	event->nt=lt;
 #ifdef DEBUG_PRINT
@@ -238,8 +259,15 @@ event_t* event_from_R(Rdata E){
 	 accessed after being freed (except through a different pointer). */
 void event_free(event_t **ev){
 	if (ev && *ev){
-		free_tf((*ev)->state);
-		free_tf((*ev)->par);
+		switch ((*ev)->type){
+			case affine_tf_event:
+			free_tf((*ev)->state);
+			free_tf((*ev)->par);
+			break;
+			case model_func_event:
+			/* for now, no action is needed */
+			break;
+		}
 		free(*ev);
 		*ev=NULL;
 	}
@@ -287,35 +315,49 @@ load_system(
 	if (lib){
 		*((char*) mempcpy(suffix,"_vf",3))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_vf=load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
-
+		if ((ODE_vf=load_or_warn(lib,symbol_name))==NULL){
+			fprintf(stderr,"[%s] loading «%s» is required.\n",__func__,symbol_name);
+			free(symbol_name);
+			return sys;
+		}
 		*((char*) mempcpy(suffix,"_jac",4))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_jac=load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
-
+		if ((ODE_jac=load_or_warn(lib,symbol_name))==NULL){
+			fprintf(stderr,"[%s] loading «%s» is required.\n",__func__,symbol_name);
+			free(symbol_name);
+			return sys;
+		}
 		*((char*) mempcpy(suffix,"_jacp",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_jacp = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
+		if ((ODE_jacp = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] not having «%s» is OK if no sensitivities are needed.\n",__func__,symbol_name);
 
 		*((char*) mempcpy(suffix,"_func",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_func = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
+		if ((ODE_func = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] not having «%s» is OK in some cases, output values will not be calculated.\n",__func__,symbol_name);
 
 		*((char*) mempcpy(suffix,"_funcJac",8))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_funcJac = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
+		if ((ODE_funcJac = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
 
 		*((char*) mempcpy(suffix,"_funcJacp",9))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_funcJacp = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
+		if ((ODE_funcJacp = load_or_warn(lib,symbol_name))==NULL)  fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
 
 		*((char*) mempcpy(suffix,"_default",8))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_default = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
+		if ((ODE_default = load_or_warn(lib,symbol_name))==NULL) {
+			fprintf(stderr,"[%s] loading «%s» is required.\n",__func__,symbol_name);
+			free(symbol_name);
+			return sys;
+		}
 
 		*((char*) mempcpy(suffix,"_init",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_init = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] loading «%s» failed.\n",__func__,symbol_name);
+		if ((ODE_init = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
+
+		*((char*) mempcpy(suffix,"_event",6))='\0';
+		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
+		if ((ODE_event = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
 	} else {
 		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,model_so,dlerror());
 		return sys;
@@ -379,7 +421,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	gsl_vector_memcpy(y,y0);
 
 	gsl_vector_view Yout_row;
-	int i=0,j;
+	int i=0,j,nL,nDose;
 	double t=t0;
 	double tf,te;
 	int status=GSL_SUCCESS;
@@ -389,7 +431,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 
 	for (j=0, i=0; j<nt; j++){
 		tf=gsl_vector_get(time,j);
-		if (event && i<event->nt && event->time[i] < tf) {
+		while (event && i<event->nt && event->time[i] < tf) {
 			te=event->time[i];
 			status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
 			if (status!=GSL_SUCCESS){
@@ -398,8 +440,17 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 #endif
 				return(status);
 			}
-			apply_tf(event->state,y->data,i);
-			apply_tf(event->par,(double*) sys.params,i);
+			switch (event->type){
+			case affine_tf_event:
+				apply_tf(event->state,y->data,i);
+				apply_tf(event->par,(double*) sys.params,i);
+				break;
+			case model_func_event:
+				nL = event->nL;
+				nDose = event->nDose;
+				ODE_event(te,y->data,sys.params,event->label[i % nL],event->dose[i % nDose]);
+				break;
+			}
 			status=gsl_odeiv2_driver_reset(driver);
 			if (status!=GSL_SUCCESS){
 #ifdef DEBUG_PRINT
@@ -423,7 +474,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	return status;
 }
 
-/*  QR witch column pivoting is abbreviated as QRTP */
+/*  QR witch column pivoting is abbreviated as QRPT */
 struct pbsrMem {
 	double t;
 	gsl_matrix *A;     // jacobian: df/dy
@@ -438,7 +489,7 @@ struct pbsrMem {
 };
 
 struct pbsrMem pbsr_mem_alloc(int ny, int np, int nf){
-	struct pbsrMem = m;
+	struct pbsrMem m;
 	m.temp = gsl_matrix_alloc(ny,np);
 	m.phi = gsl_matrix_alloc(ny,ny);
 	m.A = gsl_matrix_alloc(ny,ny);
@@ -451,7 +502,7 @@ struct pbsrMem pbsr_mem_alloc(int ny, int np, int nf){
 	return m;
 }
 
-void pbsr_mem_free(struct pbsrMem){
+void pbsr_mem_free(struct pbsrMem m){
 	gsl_matrix_free(m.temp);
 	gsl_matrix_free(m.phi);
 	gsl_matrix_free(m.A);
@@ -463,17 +514,17 @@ void pbsr_mem_free(struct pbsrMem){
 	gsl_matrix_free(m.FB);
 }
 
-struct QRTP {
+struct QRPT {
 	gsl_matrix *QR;    // stores the QR decomposed factors for QR = AP
 	gsl_vector *tau;   // QRPT tau vector
 	gsl_vector *work;  // QRPT work vector for rcond
-	gsl_matrix *norm;  // workspace
+	gsl_vector *norm;  // workspace
 	gsl_permutation *p;// permutation for WRPT
 	int signum;        // QRPT sign
 };
 
-struct QRTP qrtp_alloc(int ny){
-	struct QRTP m;
+struct QRPT qrtp_alloc(int ny){
+	struct QRPT m;
 	m.QR = gsl_matrix_alloc(ny,ny);
 	m.tau = gsl_vector_alloc(ny);
 	m.work = gsl_vector_alloc(3*ny);
@@ -482,7 +533,7 @@ struct QRTP qrtp_alloc(int ny){
 	return m;
 }
 
-void qrtp_free(struct QRTP m){
+void qrtp_free(struct QRPT m){
 	gsl_matrix_free(m.QR);
 	gsl_vector_free(m.tau);
 	gsl_vector_free(m.work);
@@ -490,14 +541,14 @@ void qrtp_free(struct QRTP m){
 	gsl_vector_free(m.norm);
 }
 
-int qrtp(struct QRTP qr, const gsl_matrix *A){
+int qrtp(struct QRPT qr, const gsl_matrix *A){
 	int status;
 	gsl_matrix_memcpy(qr.QR,A);
 	status = gsl_linalg_QRPT_decomp(qr.QR, qr.tau, qr.p, &(qr.signum), qr.norm);
 	return status;
 }
 
-double rcond(struct QRTP qr){
+double rcond(struct QRPT qr){
 	double r;
 	int status;
 	status = gsl_linalg_QRPT_rcond(qr.QR, &r, qr.work);
@@ -508,7 +559,7 @@ double rcond(struct QRTP qr){
 }
 
 struct eigen {
-	gsl_eigen_nonsymmv_workspace *w;
+	gsl_eigen_nonsymm_workspace *w;
 	gsl_vector_complex *ev;
 	gsl_matrix *T;
 };
@@ -518,14 +569,14 @@ struct eigen eigen_alloc(const int ny){
 	E.w = gsl_eigen_nonsymm_alloc(ny);
 	E.T = gsl_matrix_alloc(ny,ny);
 	E.ev= gsl_vector_complex_alloc(ny);
-	gsl_eigen_nonsymm_params(0, 1, E);
+	gsl_eigen_nonsymm_params(0, 1, E.w);
 	return E;
 }
 
 void eigen_free(struct eigen E){
 	gsl_eigen_nonsymm_free(E.w);
 	gsl_matrix_free(E.T);
-	gsl_vector_free(E.ev);
+	gsl_vector_complex_free(E.ev);
 }
 
 int stable(const gsl_matrix *A, struct eigen E){
@@ -538,16 +589,18 @@ int stable(const gsl_matrix *A, struct eigen E){
 /* advances the state y from `left` state to `right` state and also
 	 advances the sensitivity approximation with it. the structs letf
 	 and right have pre-allocated space for jacobians and other matrices
-	 (including the snesitivity matrix). The structs pbsrMem and QRTP
+	 (including the snesitivity matrix). The structs pbsrMem and QRPT
 	 are structs of pointers to allocated memory.*/
-int advance(const gsl_odeiv2_system sys, gsl_odeiv2_driver *driver, gsl_vector *y, struct pbsrMem left, struct pbsrMem right, struct QRTP qr, struct eigen ev){
+int advance(const gsl_odeiv2_system sys, gsl_odeiv2_driver *driver, gsl_vector *y, struct pbsrMem left, struct pbsrMem right, struct QRPT qr, struct eigen ev){
 	int status=GSL_SUCCESS;
 	const double ti=left.t;  // initial time point
-	const double tf=right.r; // final time point
+	const double tf=right.t; // final time point
 	double t=left.t;         // t is advanced from `ti` to `tf`
 	double delta_t;
 	double *p=sys.params;
 	double h=1e-2;
+	int k,l;
+	gsl_vector_view col;
 	while (left.t < right.t){
 		ODE_jac(t,y->data,(left.A)->data,(left.dfdt)->data,p);
 		ODE_jacp(t,y->data,(left.B)->data,(left.dfdt)->data,p);
@@ -569,7 +622,7 @@ int advance(const gsl_odeiv2_system sys, gsl_odeiv2_driver *driver, gsl_vector *
 		if (qrtp(qr,left.A)==GSL_SUCCESS && rcond(qr) > RCOND_LIMIT && stable(left.A,ev)){
 			for (k=0;k<l;k++){
 				col=gsl_matrix_column(left.B,k);
-				gsl_linalg_QRTP_svx(qr.QR, qr.tau, qr.p, &(col.vector));  /* B <- A\B*/
+				gsl_linalg_QRPT_svx(qr.QR, qr.tau, qr.p, &(col.vector));  /* B <- A\B*/
 			}
 			gsl_matrix_scale(left.A, delta_t);                          /* A <- (df/dy)*(t-t0)*/
 			gsl_linalg_exponential_ss(left.A, ev.T, GSL_PREC_SINGLE);   /* T <- exp(A*(t-t0))*/
@@ -605,9 +658,9 @@ simulate_timeseries_and_sensitivity(
 	const double t0, /* the initial time: y(t0) = y0 */
 	const gsl_vector *y0, /* initial value */
 	const gsl_vector *time, /* a vector of time-points */
-	struct pbsrMem left;
-	struct pbsrMem right;
-	struct QRTP qr,
+	struct pbsrMem left,
+	struct pbsrMem right,
+	struct QRPT qr,
 	struct eigen ev,
 	const event_t *event, /*a struct array with scheduled events */
 	double *sens,     /* (OUT) return value, sensitivity */
@@ -660,12 +713,12 @@ simulate_timeseries_and_sensitivity(
 		if (td>t) status=advance(sys, driver, y, left, right, qr, ev);
 		t = right.t;
 		if(status==GSL_SUCCESS){
-			ODE_funcJac(t,y,(right.FA)->data,p->data);
-			ODE_funcJacp(t,y,(right.Sf)->data,p->data);
-			gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, right.FA, right.Sy, 1.0, M.Sf);
+			ODE_funcJac(t,y->data,(right.FA)->data,p);
+			ODE_funcJacp(t,y->data,(right.Sf)->data,p);
+			gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, right.FA, right.Sy, 1.0, right.Sf);
 
-			Sy = gsl_vector_view_array(sens+j*ny*np,np,ny);
-			Sf = gsl_vector_view_array(func_sens+j*nf*np,np,nf);
+			Sy = gsl_matrix_view_array(sens+j*ny*np,np,ny);
+			Sf = gsl_matrix_view_array(func_sens+j*nf*np,np,nf);
 			gsl_matrix_transpose_memcpy(&Sy.matrix, right.Sy);
 			//report any error codes to the R user
 			Yout_row = gsl_matrix_row(Yout,j);
