@@ -290,8 +290,10 @@ void *load_or_warn(void *lib, /* file pointer, previously opened via `dlopen()` 
 #ifdef DEBUG_PRINT
 		fprintf(stderr,"[%s] «%s» loaded successfully.\n",__func__,name);
 #endif
-	}else{
+	} else {
+#ifdef DEBUG_PRINT
 		fprintf(stderr,"[%s] loading of «%s» failed: slerror was «%s»\n",__func__,name,dlerror());
+#endif
 		return NULL;
 	}
 	return symbol;
@@ -333,20 +335,34 @@ load_system(
 		}
 		*((char*) mempcpy(suffix,"_jacp",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_jacp = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] not having «%s» is OK if no sensitivities are needed.\n",__func__,symbol_name);
-
+		if ((ODE_jacp = load_or_warn(lib,symbol_name))==NULL){
+#ifdef DEBUG_PRINT
+			fprintf(stderr,"[%s] not having «%s» is OK if no sensitivities are needed.\n",__func__,symbol_name);
+#endif
+		}
 		*((char*) mempcpy(suffix,"_func",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_func = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] not having «%s» is OK in some cases, output values will not be calculated.\n",__func__,symbol_name);
+		if ((ODE_func = load_or_warn(lib,symbol_name))==NULL){
+#ifdef DEBUG_PRINT
+			fprintf(stderr,"[%s] not having «%s» is OK in some cases, output values will not be calculated.\n",__func__,symbol_name);
+#endif
+		}
 
 		*((char*) mempcpy(suffix,"_funcJac",8))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_funcJac = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
+		if ((ODE_funcJac = load_or_warn(lib,symbol_name))==NULL){
+#ifdef DEBUG_PRINT
+			fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
+#endif
+		}
 
 		*((char*) mempcpy(suffix,"_funcJacp",9))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_funcJacp = load_or_warn(lib,symbol_name))==NULL)  fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
-
+		if ((ODE_funcJacp = load_or_warn(lib,symbol_name))==NULL){
+#ifdef DEBUG_PRINT
+			fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
+#endif
+		}
 		*((char*) mempcpy(suffix,"_default",8))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_default = load_or_warn(lib,symbol_name))==NULL) {
@@ -357,11 +373,18 @@ load_system(
 
 		*((char*) mempcpy(suffix,"_init",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_init = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
-
+		if ((ODE_init = load_or_warn(lib,symbol_name))==NULL){
+#ifdef DEBUG_PRINT
+			fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
+#endif
+		}
 		*((char*) mempcpy(suffix,"_event",6))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
-		if ((ODE_event = load_or_warn(lib,symbol_name))==NULL) fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
+		if ((ODE_event = load_or_warn(lib,symbol_name))==NULL){
+#ifdef DEBUG_PRINT
+			fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
+#endif
+		}
 	} else {
 		fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,model_so,dlerror());
 		return sys;
@@ -1024,9 +1047,9 @@ r_gsl_odeiv2_outer(
 		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
+	driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 	for (i=0; i<N; i++){
 		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
-		driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
 		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0")))[0];
@@ -1057,7 +1080,7 @@ r_gsl_odeiv2_outer(
 		set_names(yf_list,yf_names,1);
 		SET_VECTOR_ELT(res_list,i,yf_list);
 		event_free(&ev);
-		gsl_odeiv2_driver_free(driver);
+
 		UNPROTECT(1); /* yf_list */
 		UNPROTECT(1); /* Y */
 #ifdef DEBUG_PRINT
@@ -1067,6 +1090,9 @@ r_gsl_odeiv2_outer(
 		}
 #endif
 	} // experiments: 0 to N-1
+	gsl_matrix_free(P);
+	gsl_matrix_free(Y0);
+	gsl_odeiv2_driver_free(driver);
 	UNPROTECT(1); /* res_list */
 	return res_list;
 }
@@ -1100,7 +1126,7 @@ r_gsl_odeiv2_outer_func(
 	int N=GET_LENGTH(experiments);
 	size_t M=ncols(parameters);
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
-	gsl_odeiv2_driver *driver;
+
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
 	Rdata yf_list, Y, F, iv, t;
@@ -1121,7 +1147,7 @@ r_gsl_odeiv2_outer_func(
 	}
 	gsl_matrix *P = params_alloc(experiments);
 	gsl_matrix *Y0 = init_alloc(sys,P);
-	driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+	gsl_odeiv2_driver *driver = gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 	ny = Y0->size2;
 	for (i=0; i<N; i++){
 		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
@@ -1209,7 +1235,7 @@ r_gsl_odeiv2_outer_sens(
 	int N=GET_LENGTH(experiments);
 	size_t M=ncols(parameters);
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
-	gsl_odeiv2_driver *driver;
+
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
 	Rdata yf_list, Y, F, iv, t;
@@ -1238,7 +1264,7 @@ r_gsl_odeiv2_outer_sens(
 	struct sensApproxMem saMem = sensApproxMemAlloc(ny,np,nf);
 	//fprintf(stderr,"expm\tsvx\tLU\tdgemm\texpm/s\tsvx/s\tLU/s\tdgemm/s\n"); // sensitivityApproximation
 	//fprintf(stderr,"----\t---\t--\t-----\t------\t-----\t----\t-------\n"); // will print times
-	driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+	gsl_odeiv2_driver *driver = gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 	for (i=0; i<N; i++){
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");

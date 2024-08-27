@@ -4,9 +4,10 @@
 #'
 #' @param f file ending, search will be restricted to this
 #' @export
-rgsl.example<-function(f="_gvf.c"){
-	if (!is.null(f)){
-		pat <- gsub("\\.","[.]",sprintf("%s$",f))
+rgsl.example<-function(modelName="HarmonicOscillator",f="_gvf.c"){
+	pat = "c$"
+	if (nzchar(f) || nzchar(modelName)){
+		pat <- gsub("\\.","[.]",sprintf("%s%s$",modelName,f))
 	}
 	return(dir(system.file("extdata", package = "rgsl"),full.names=TRUE,pattern=pat))
 }
