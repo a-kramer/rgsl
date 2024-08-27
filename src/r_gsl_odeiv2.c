@@ -1189,8 +1189,7 @@ r_gsl_odeiv2_outer_func(
 		UNPROTECT(1); /* Y */
 	} // experiments: 0 to N-1
 	gsl_matrix_free(P);
-	fprintf(stderr,"[%s] %s final free() statement.\n",__func__,model_name); fflush(stderr);
-	//gsl_matrix_free(Y0);
+	gsl_matrix_free(Y0);
 	gsl_odeiv2_driver_free(driver);
 	UNPROTECT(1); /* res_list */
 	return res_list;
