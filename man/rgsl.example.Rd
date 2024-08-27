@@ -4,7 +4,7 @@
 \alias{rgsl.example}
 \title{Locate Example Files}
 \usage{
-rgsl.example(f = "_gvf.c")
+rgsl.example(modelName = "HarmonicOscillator", f = "_gvf.c")
 }
 \arguments{
 \item{f}{file ending, search will be restricted to this}
