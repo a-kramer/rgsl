@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -24,6 +23,10 @@
  * a bad type name; I am compelled to pronounce it in my head ...
  */
 typedef SEXP Rdata;
+
+char* pcpy(char *dest, char *src, size_t n){
+	return ((char*) memcpy(dest,src,n)+n);
+}
 
 /* an ODE model y'=f(t,y,p) will have a name, and several functions, prefixed with
  * that name, e.g.: ${name}_vf().
@@ -315,32 +318,32 @@ load_system(
 	size_t n,l;
 	size_t m=strlen(model_name);
 	char *symbol_name=malloc(m+32); // symbol name in .so
-	char *suffix=mempcpy(symbol_name,model_name,m);
+	char *suffix=pcpy(symbol_name,model_name,m);
 	*suffix='\0';
 
 	if (lib){
-		*((char*) mempcpy(suffix,"_vf",3))='\0';
+		*((char*) pcpy(suffix,"_vf",3))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_vf=load_or_warn(lib,symbol_name))==NULL){
 			fprintf(stderr,"[%s] loading «%s» is required.\n",__func__,symbol_name);
 			free(symbol_name);
 			return sys;
 		}
-		*((char*) mempcpy(suffix,"_jac",4))='\0';
+		*((char*) pcpy(suffix,"_jac",4))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_jac=load_or_warn(lib,symbol_name))==NULL){
 			fprintf(stderr,"[%s] loading «%s» is required.\n",__func__,symbol_name);
 			free(symbol_name);
 			return sys;
 		}
-		*((char*) mempcpy(suffix,"_jacp",5))='\0';
+		*((char*) pcpy(suffix,"_jacp",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_jacp = load_or_warn(lib,symbol_name))==NULL){
 #ifdef DEBUG_PRINT
 			fprintf(stderr,"[%s] not having «%s» is OK if no sensitivities are needed.\n",__func__,symbol_name);
 #endif
 		}
-		*((char*) mempcpy(suffix,"_func",5))='\0';
+		*((char*) pcpy(suffix,"_func",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_func = load_or_warn(lib,symbol_name))==NULL){
 #ifdef DEBUG_PRINT
@@ -348,7 +351,7 @@ load_system(
 #endif
 		}
 
-		*((char*) mempcpy(suffix,"_funcJac",8))='\0';
+		*((char*) pcpy(suffix,"_funcJac",8))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_funcJac = load_or_warn(lib,symbol_name))==NULL){
 #ifdef DEBUG_PRINT
@@ -356,14 +359,14 @@ load_system(
 #endif
 		}
 
-		*((char*) mempcpy(suffix,"_funcJacp",9))='\0';
+		*((char*) pcpy(suffix,"_funcJacp",9))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_funcJacp = load_or_warn(lib,symbol_name))==NULL){
 #ifdef DEBUG_PRINT
 			fprintf(stderr,"[%s] not having «%s» is OK, but output sensitivities will not be calculated.\n",__func__,symbol_name);
 #endif
 		}
-		*((char*) mempcpy(suffix,"_default",8))='\0';
+		*((char*) pcpy(suffix,"_default",8))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_default = load_or_warn(lib,symbol_name))==NULL) {
 			fprintf(stderr,"[%s] loading «%s» is required.\n",__func__,symbol_name);
@@ -371,14 +374,14 @@ load_system(
 			return sys;
 		}
 
-		*((char*) mempcpy(suffix,"_init",5))='\0';
+		*((char*) pcpy(suffix,"_init",5))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_init = load_or_warn(lib,symbol_name))==NULL){
 #ifdef DEBUG_PRINT
 			fprintf(stderr,"[%s] «%s» is optional.\n",__func__,symbol_name);
 #endif
 		}
-		*((char*) mempcpy(suffix,"_event",6))='\0';
+		*((char*) pcpy(suffix,"_event",6))='\0';
 		//printf("[%s] loading «%s» from «%s».\n",__func__,symbol_name,model_so);
 		if ((ODE_event = load_or_warn(lib,symbol_name))==NULL){
 #ifdef DEBUG_PRINT
