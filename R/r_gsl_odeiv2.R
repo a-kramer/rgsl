@@ -115,7 +115,7 @@ r_gsl_odeiv2_outer_sens <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5
 #' @param initial.step.size initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3
 #' @return the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
 #' @keywords ODE
-#' @useDynLib rgsl, odeiv_outer_state=r_gsl_odeiv2_outer
+#' @useDynLib rgsl, odeiv_outer_state=r_gsl_odeiv2_outer_state_only
 #' @export
 #' @examples
 #' y0 <- c(0,1)

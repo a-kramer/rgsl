@@ -51,6 +51,7 @@ test_that("sensitivity is correct",{
 		predict_y_p2[,j] <- y$state[,j,1] + sy %*% Delta
 	}
 	expect_lt(norm(true_f_p2 - predict_f_p2,"2")/nt,5e-1)
+	dev.new()
 	plot(t_,true_f_p2,main="prediction of dots via funcSensitivity",xlab='t',ylab='func',pch=1)
 	lines(t_,predict_f_p2,lty=1)
 	lines(t_,y$func[,,1],lty=2)

@@ -498,6 +498,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 			return(status);
 		}
 	}
+	gsl_vector_free(y);
 	gsl_odeiv2_driver_reset(driver);
 	return status;
 }
@@ -765,7 +766,7 @@ gsl_matrix* params_alloc(Rdata experiments){
 	int i,N;
 	gsl_matrix *P=NULL;
 	int np,nu;
-	gsl_vector *p;
+	gsl_vector *p=NULL;
 	Rdata input;
 	double* u;
 	gsl_vector_view row;
@@ -778,11 +779,11 @@ gsl_matrix* params_alloc(Rdata experiments){
 		N=length(experiments);
 		P=gsl_matrix_alloc(N,p->size);
 		for (i=0;i<N;i++){
-			input = from_list(VECTOR_ELT(experiments,i),"input Input u");
+			input = from_list(VECTOR_ELT(experiments,i),"input Input u inputs Inputs");
 			nu = (input != R_NilValue) ? length(input) : 0;
 			row = gsl_matrix_row(P,i);
 			gsl_vector_memcpy(&row.vector,p);
-			if (nu>0){
+			if (nu>0 && np>=nu){
 				u = gsl_matrix_ptr(P,i,np-nu);
 				memcpy(u, REAL(input), nu*sizeof(double));
 			}
@@ -792,6 +793,7 @@ gsl_matrix* params_alloc(Rdata experiments){
 		row = gsl_matrix_row(P,0);
 		gsl_vector_memcpy(&row.vector,p);
 	}
+	if (p) gsl_vector_free(p);
 	return P;
 }
 
@@ -799,15 +801,15 @@ gsl_matrix* params_alloc(Rdata experiments){
 gsl_matrix* init_alloc(const gsl_odeiv2_system sys, gsl_matrix *p){
 	int ny = sys.dimension;
 	int i,N = p->size1;
-	gsl_matrix *y0 = gsl_matrix_alloc(N,ny);
+	gsl_matrix *Y0 = gsl_matrix_alloc(N,ny);
 	double t = 0.0;
-	gsl_matrix_set_zero(y0);
+	gsl_matrix_set_zero(Y0);
 	if (ODE_init){
 		for (i=0;i<N;i++){
-			ODE_init(t,gsl_matrix_ptr(y0,i,0),gsl_matrix_ptr(p,i,0));
+			ODE_init(t,gsl_matrix_ptr(Y0,i,0),gsl_matrix_ptr(p,i,0));
 		}
 	}
-	return y0;
+	return Y0;
 }
 
 void update_initial_values(gsl_vector *y0, gsl_odeiv2_system sys, Rdata iv){
@@ -1009,7 +1011,7 @@ int sensitivityApproximation(double t0, gsl_vector *t, gsl_vector *p, gsl_matrix
 	 This function is parallel in the list of supplied experiments.
 */
 Rdata /* the trajectories as a list (same size as experiments) */
-r_gsl_odeiv2_outer(
+r_gsl_odeiv2_outer_state_only(
  Rdata modelName, /* a string */
  Rdata experiments, /* a list of simulation experiments */
  Rdata parameters, /* a matrix of parameterization columns*/
@@ -1027,7 +1029,7 @@ r_gsl_odeiv2_outer(
 	int N=GET_LENGTH(experiments);
 	size_t M=ncols(parameters);
 	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
-	gsl_odeiv2_driver *driver;
+
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
 	Rdata yf_list, Y, iv, t;
@@ -1038,22 +1040,20 @@ r_gsl_odeiv2_outer(
 	size_t ny, nt;
 	struct event *ev=NULL;
 	gsl_odeiv2_system sys = load_system(model_name, model_so); /* also sets ODE_*() functions */
-	if (ODE_default==NULL || ODE_init==NULL)
+	if (ODE_default==NULL || ODE_init==NULL){
 		fprintf(stderr,"[%s] loading model has failed.\n",__func__);
-	gsl_matrix *P = params_alloc(experiments);
-	gsl_matrix *Y0 = init_alloc(sys,P);
-	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */
-		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
-	driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+	gsl_matrix *P = params_alloc(experiments);
+	gsl_matrix *Y0 = init_alloc(sys,P);
+	gsl_odeiv2_driver *driver = gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 	for (i=0; i<N; i++){
 		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
 		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0")))[0];
-		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
+		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"event events scheduledEvents scheduled_events"));
 		sys.params = gsl_matrix_ptr(P,i,0);
 		initial_value = gsl_matrix_row(Y0,i);
 		nt = length(t);
@@ -1083,12 +1083,6 @@ r_gsl_odeiv2_outer(
 
 		UNPROTECT(1); /* yf_list */
 		UNPROTECT(1); /* Y */
-#ifdef DEBUG_PRINT
-		if (status!=GSL_SUCCESS){
-			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
-			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
-		}
-#endif
 	} // experiments: 0 to N-1
 	gsl_matrix_free(P);
 	gsl_matrix_free(Y0);
@@ -1131,37 +1125,37 @@ r_gsl_odeiv2_outer_func(
 	SET_NAMES(res_list,GET_NAMES(experiments));
 	Rdata yf_list, Y, F, iv, t;
 	double t0;
-	const char *yf_names[4]={"state","func"};
+	const char *yf_names[2]={"state","func"};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
-	size_t ny, nt, nf;
+	size_t nt;
 	struct event *ev=NULL;
 	double *f;
 	gsl_odeiv2_system sys = load_system(model_name, model_so); /* also sets ODE_*() functions */
-	if (ODE_default==NULL || ODE_init==NULL || ODE_func==NULL)
+	if (ODE_default==NULL || ODE_init==NULL || ODE_func==NULL){
 		fprintf(stderr,"[%s] loading model has failed.\n",__func__);
-	if (sys.dimension == 0) {
 		UNPROTECT(1); /* res_list */
-		fprintf(stderr,"[%s] system dimension: «%li».\n",__func__,sys.dimension);
 		return R_NilValue;
 	}
+	size_t nf = ODE_func(0,NULL,NULL,NULL);
+	size_t ny = sys.dimension;
 	gsl_matrix *P = params_alloc(experiments);
 	gsl_matrix *Y0 = init_alloc(sys,P);
 	gsl_odeiv2_driver *driver = gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-	ny = Y0->size2;
+
 	for (i=0; i<N; i++){
 		//fprintf(stderr,"[%s] experiment %i of %i.\n",__func__,i,N); fflush(stderr);
 		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState initialValue intialValues");
 		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes t");
 		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initial_time initialTime t0 T0")))[0];
-		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents scheduled_events"));
-		sys.params = gsl_matrix_ptr(Y0,i,0);
+		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"event events scheduledEvents scheduledEvent scheduled_events"));
+		sys.params = gsl_matrix_ptr(P,i,0);
 		initial_value = gsl_matrix_row(Y0,i);
 		nt = length(t);
 		time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
 		for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
-		nf=ODE_func(0,NULL,NULL,NULL);
+
 		F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
 		for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL;   /* initialize to NA */
 		for (k=0;k<M;k++){
@@ -1193,17 +1187,12 @@ r_gsl_odeiv2_outer_func(
 		UNPROTECT(1); /* yf_list */
 		UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
-#ifdef DEBUG_PRINT
-		if (status!=GSL_SUCCESS){
-			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
-			for (j=0; j<np_model; j++) fprintf(stderr,"%g%s",p[j],(j==np_model-1?"\n":", "));
-		}
-#endif
 	} // experiments: 0 to N-1
-	UNPROTECT(1); /* res_list */
-	gsl_odeiv2_driver_free(driver);
 	gsl_matrix_free(P);
-	gsl_matrix_free(Y0);
+	fprintf(stderr,"[%s] %s final free() statement.\n",__func__,model_name); fflush(stderr);
+	//gsl_matrix_free(Y0);
+	gsl_odeiv2_driver_free(driver);
+	UNPROTECT(1); /* res_list */
 	return res_list;
 }
 
@@ -1266,10 +1255,10 @@ r_gsl_odeiv2_outer_sens(
 	//fprintf(stderr,"----\t---\t--\t-----\t------\t-----\t----\t-------\n"); // will print times
 	gsl_odeiv2_driver *driver = gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 	for (i=0; i<N; i++){
-		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState");
-		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes");
-		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"initialTime t0 T0")))[0];
-		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"events scheduledEvents"));
+		iv = from_list(VECTOR_ELT(experiments,i),"initial_value initialState initialValue initialValues");
+		t = from_list(VECTOR_ELT(experiments,i),"time outputTimes t");
+		t0 = REAL(AS_NUMERIC(from_list(VECTOR_ELT(experiments,i),"intial_time initialTime t0 T0")))[0];
+		ev = event_from_R(from_list(VECTOR_ELT(experiments,i),"event events scheduledEvents scheduledEvent scheduled_event"));
 		initial_value = gsl_matrix_row(Y0,0);
 		sys.params = gsl_matrix_ptr(P,i,0);
 		nt = length(t);

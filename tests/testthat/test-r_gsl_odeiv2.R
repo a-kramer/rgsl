@@ -91,24 +91,27 @@ test_that("event function works",{
 	modelName <- "CaSpike"
 	model.c <- rgsl.example(modelName)
 	comment(modelName) <- model.so(model.c)
-	y0 <- 0.2
-	p <- c(tau=0.1,CaBase=0.2)
+	y0 <- 0.7
+	p <- c(tau=0.01)
 	t_out <- seq(0,1,length.out=100)
 	ev.t <- seq(0,1,by=0.05)
 	event <- list(label=integer(length(ev.t)),time=ev.t,dose=integer(length(ev.t)))
-	a <- list(input=c(dCa=0.5),event=event,outputTimes=t_out,t0=-2)
-	b <- list(input=c(dCa=1.5),event=event,outputTimes=t_out,t0=-2)
-	c <- list(input=c(dCa=3.5),event=event,outputTimes=t_out,t0=-2)
+	a <- list(input=c(dCa=0.5),event=event,outputTimes=t_out,t0=0)
+	b <- list(input=c(dCa=1.5),event=event,outputTimes=t_out,t0=0)
+	c <- list(input=c(dCa=3.5),event=event,outputTimes=t_out,t0=0)
 	experiments <- list(a,b,c)
-	y <- r_gsl_odeiv2_outer_sens(modelName,experiments,as.matrix(p))
+	y <- r_gsl_odeiv2_outer(modelName,experiments,as.matrix(p))
 	expect_type(y,"list")
 	expect_length(y,length(experiments))
 	expect_named(y,names(experiments))
 	expect_true(all(is.finite(y[[1]]$state)))
 	expect_true(all(is.finite(y[[2]]$state)))
-	plot(t_out,y[[1]]$state[1,,1],main=names(experiments)[1],sub="y(t) = [t>t.ev] * dCa*exp(-t/tau) + CaBase",xlab="time",ylab="state y[1]",type="p")
+	dev.new()
+	plot(t_out,y[[1]]$state[1,,1],main=names(experiments)[1],sub="y(t) = [t>t.ev] * dCa*exp(-t/tau) + CaBase",xlab="time",ylab="state y[1]",type="p",ylim=c(0,max(y[[3]]$state)))
 	for (i in seq_along(y)){
-		lines(t_out,y[[i]]$state[1,,1])
+		Ca <- y[[i]]$state[1,,1]
+		expect_length(Ca,length(t_out))
+		lines(t_out,Ca)
 	}
-	legend("topright",legend=c("",names(experiments)))
+	legend("topright",legend=c("",names(experiments)),lty=c(NA,1,2,3),pch=c(1,NA,NA,NA))
 })
