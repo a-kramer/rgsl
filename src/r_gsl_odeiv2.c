@@ -458,7 +458,7 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 
 	for (j=0, i=0; j<nt; j++){
 		tf=gsl_vector_get(time,j);
-		while (event && i<event->nt && event->time[i] < tf) {
+		while (event && i<event->nt && event->time[i] <= tf) {
 			te=event->time[i];
 			status=gsl_odeiv2_driver_apply(driver, &t, te, y->data);
 			if (status!=GSL_SUCCESS){
