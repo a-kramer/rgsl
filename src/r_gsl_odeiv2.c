@@ -422,13 +422,13 @@ void check_status(
 	double tf=target_t;
 	switch (status){
 	case GSL_EMAXITER:
-		error("[%s] time_point %li: maximum number of steps reached.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+		error("[%s] time_point %i: maximum number of steps reached.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
 		break;
 	case GSL_ENOPROG:
-		error("[%s] time_point %li: step size dropped below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+		error("[%s] time_point %i: step size dropped below set minimum.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
 		break;
 	case GSL_EBADFUNC:
-		error("[%s] time_point %li: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
+		error("[%s] time_point %i: bad function.\n\t\tfinal time: %.10g (short of %.10g)",__func__,j,t,tf);
 		break;
 	}
 }
