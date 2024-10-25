@@ -12,7 +12,7 @@ License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.2
 SystemRequirements: GNU Scientific Library (>= 2.7) [GSL](https://www.gnu.org/software/gsl/)
 Suggests:
     testthat (>= 3.0.0)

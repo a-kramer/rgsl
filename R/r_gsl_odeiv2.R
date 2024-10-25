@@ -45,7 +45,9 @@ r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,init
 		so <- paste0("./",name,".so")
 		comment(name)<-so
 	}
-	stopifnot(file.exists(so))
+	if (!file.exists(so)){
+            warning(sprintf("[r_gsl_odeiv2_outer] for model name «%s», in directory «%s» file «%s» not found.",name,getwd(),so))
+	}
 	if (!is.matrix(p)) p <- as.matrix(p)
 	y <- .Call(odeiv_outer_f,name,experiments,p,abs.tol,rel.tol,initial.step.size)
 	return(y)
