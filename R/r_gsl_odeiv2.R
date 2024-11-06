@@ -50,6 +50,14 @@ r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,init
 	}
 	if (!is.matrix(p)) p <- as.matrix(p)
 	y <- .Call(odeiv_outer_f,name,experiments,p,abs.tol,rel.tol,initial.step.size)
+	for (i in seq_along(experiments)){
+		if ("initialState" %in% names(experiments[[i]])){
+			dimnames(y[[i]]$state) <- list(names(experiments[[i]]$initialState),NULL,NULL)
+		}
+		if ("outputValues" %in% names(experiments[[i]])){
+			dimnames(y[[i]]$func) <- list(names(experiments[[i]]$outputValues),NULL,NULL)
+		}
+	}
 	return(y)
 }
 
@@ -95,6 +103,20 @@ r_gsl_odeiv2_outer_sens <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5
 	stopifnot(file.exists(so))
 	if (!is.matrix(p)) p <- as.matrix(p)
 	y <- .Call(odeiv_outer_sens,name,experiments,p,abs.tol,rel.tol,initial.step.size)
+	for (i in seq_along(experiments)){
+		if ("initialState" %in% names(experiments[[i]])){
+			dimnames(y[[i]]$state) <- list(names(experiments[[i]]$initialState),NULL,NULL)
+			for (j in seq_along(y[[i]]$stateSensitivity)){
+			 dimnames(y[[i]]$stateSensitivity[[j]]) <- list(names(experiments[[i]]$initialState),NULL,NULL)
+			}
+		}
+		if ("outputValues" %in% names(experiments[[i]])){
+			dimnames(y[[i]]$func) <- list(names(experiments[[i]]$outputValues),NULL,NULL)
+			for (j in seq_along(y[[i]]$funcSensitivity)){
+				dimnames(y[[i]]$funcSensitivity[[j]]) <- list(names(experiments[[i]]$outputValues),NULL,NULL)
+			}
+		}
+	}
 	return(y)
 }
 
@@ -135,6 +157,11 @@ r_gsl_odeiv2_outer_state_only <- function(name,experiments,p,abs.tol=1e-6,rel.to
 	stopifnot(file.exists(so))
 	if (!is.matrix(p)) p <- as.matrix(p)
 	y <- .Call(odeiv_outer_state,name,experiments,p,abs.tol,rel.tol,initial.step.size)
+	for (i in seq_along(experiments)){
+		if ("initialState" %in% names(experiments[[i]])){
+			dimnames(y[[i]]$state) <- list(names(experiments[[i]]$initialState),NULL,NULL)
+		}
+	}
 	return(y)
 }
 
