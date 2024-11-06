@@ -24,7 +24,7 @@
  */
 typedef SEXP Rdata;
 
-char* pcpy(char *dest, char *src, size_t n){
+char* pcpy(char *dest, const char *src, size_t n){
 	return ((char*) memcpy(dest,src,n)+n);
 }
 
