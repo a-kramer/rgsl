@@ -455,7 +455,8 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 	double t=t0;
 	double tf,te;
 	int status=GSL_SUCCESS;
-
+	double dose=0;
+	int label=0;
 	/* initialize t0 values */
 	gsl_vector_memcpy(y,y0);
 
@@ -479,7 +480,9 @@ simulate_timeseries(const gsl_odeiv2_system sys, /* the system to integrate */
 			case model_func_event:
 				nL = event->nL;
 				nDose = event->nDose;
-				ODE_event(te,y->data,sys.params,event->label[i % nL],event->dose[i % nDose]);
+				if (event->dose && nDose) dose = event->dose[i % nDose];
+				if (event->label && nL) label = event->label[i % nL];
+				ODE_event(te,y->data,sys.params,label,dose);
 				break;
 			}
 			status=gsl_odeiv2_driver_reset(driver);
