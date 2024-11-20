@@ -23,8 +23,8 @@ test_that("sensitivity is correct",{
 	expect_type(Y,"list")
 	expect_true(all(is.finite(Y[[1]]$state)))
 	expect_length(Y,N)
-	expect_length(y,4)
-	expect_equal(names(y),c('state','func','stateSensitivity','funcSensitivity'))
+	expect_length(y,5)
+	expect_equal(names(y),c('state','func','stateSensitivity','funcSensitivity','cpuSeconds'))
 	sState <- y$stateSensitivity
 	sFunc <- y$funcSensitivity
 	expect_true(is.list(sState))

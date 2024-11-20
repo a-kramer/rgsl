@@ -10,7 +10,8 @@ r_gsl_odeiv2_outer_state_only(
   p,
   abs.tol = 1e-06,
   rel.tol = 1e-05,
-  initial.step.size = 0.001
+  initial.step.size = 0.001,
+  method = 0
 )
 }
 \arguments{

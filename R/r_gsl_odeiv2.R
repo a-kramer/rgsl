@@ -1,3 +1,94 @@
+#' Selects the integration method, by name
+#'
+#' These are the methods in the gsl library (documented in the
+#' official documentation), but in reverse order, as they are
+#' approximately ordered by complexity, with more complex methods
+#' usually being better.
+#'
+#' It is therefore a reasonable approach to try methods from the more
+#' complex end of the list first and try the next method if the
+#' solutions are too slow. But ensure checking the accuracy/stability of the
+#' result. The mapping between method names and keys:
+#'
+#' ```
+#'      msbdf:	 0
+#'    msadams:	 1
+#'      bsimp:	 2
+#'     rk4imp:	 3
+#'     rk2imp:	 4
+#'     rk1imp:	 5
+#'      rk8pd:	 6
+#'       rkck:	 7
+#'      rkf45:	 8
+#'        rk4:	 9
+#'        rk2:	10
+#' ```
+#'
+#' The returned value must be passed to the solver function calls, e.g.: r_gsl_odeiv2_outer(...,method = integrationMaethod("msbdf"))
+#' @export
+#' @param charMethod a scalar character string, defaulting to msbdf
+#' @return an integer offset, which will select the named method in the solvers
+integrationMethod <- function(charMethod=c("msbdf","msadams","bsimp","rk4imp","rk2imp","rk1imp","rk8pd","rkck","rkf45","rk4","rk2")){
+	return(
+		switch(charMethod[1],
+			msbdf=0,
+			msadams=1,
+			bsimp=2,
+			rk4imp=3,
+			rk2imp=4,
+			rk1imp=5,
+			rk8pd=6,
+			rkck=7,
+			rkf45=8,
+			rk4=9,
+			rk2=10,
+			0
+		)
+	)
+}
+
+#' Reverse look-up of method name from key
+#'
+#' These are the methods in the gsl library (documented in the
+#' official documentation), but in reverse order, as they are
+#' approximately ordered by complexity, with more complex methods
+#' usually being better (but slower).
+#'
+#' It is therefore a reasonable approach to try methods from the more
+#' complex end of the list first and try the next method if the
+#' solutions are too slow. But we need to check the accuracy/stability of the
+#' result. The mapping between method names and keys:
+#'
+#' ```
+#'      msbdf:	 0
+#'    msadams:	 1
+#'      bsimp:	 2
+#'     rk4imp:	 3
+#'     rk2imp:	 4
+#'     rk1imp:	 5
+#'      rk8pd:	 6
+#'       rkck:	 7
+#'      rkf45:	 8
+#'        rk4:	 9
+#'        rk2:	10
+#' ```
+#'
+#' The returned value is an integer index.
+#' @export
+#' @param key an integer from 0 to 10 (this is used as an offset in c, for 11 items)
+#' @return a string representation of the integration method.
+nameMethod <- function(key){
+	charMethod <- c("msbdf","msadams","bsimp","rk4imp","rk2imp","rk1imp","rk8pd","rkck","rkf45","rk4","rk2")
+	k <- round(key[1]+1)
+	if (0 < k && k <= length(charMethod)){
+		return(charMethod[key])
+	} else {
+		warning(sprintf("invalid key %i",k))
+		return("")
+	}
+}
+
+
 #' Initial Value Problem solution in C
 #'
 #' This is a wrapper. It uses the .Call function to call the C
@@ -38,7 +129,7 @@
 #' u <- c(0,0)
 #' e <- list(time=t,input=u,initial_value=y0)
 #' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
-r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
+r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3,method=0){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -49,7 +140,7 @@ r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,init
             warning(sprintf("[r_gsl_odeiv2_outer] for model name «%s», in directory «%s» file «%s» not found.",name,getwd(),so))
 	}
 	if (!is.matrix(p)) p <- as.matrix(p)
-	y <- .Call(odeiv_outer_f,name,experiments,p,abs.tol,rel.tol,initial.step.size)
+	y <- .Call(odeiv_outer_f,name,experiments,p,abs.tol,rel.tol,initial.step.size,method)
 	for (i in seq_along(experiments)){
 		if ("initialState" %in% names(experiments[[i]])){
 			dimnames(y[[i]]$state) <- list(names(experiments[[i]]$initialState),NULL,NULL)
@@ -93,7 +184,7 @@ r_gsl_odeiv2_outer <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,init
 #' u <- c(0,0)
 #' e <- list(time=t,input=u,initial_value=y0)
 #' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
-r_gsl_odeiv2_outer_sens <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
+r_gsl_odeiv2_outer_sens <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3,method=0){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -102,7 +193,7 @@ r_gsl_odeiv2_outer_sens <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5
 	}
 	stopifnot(file.exists(so))
 	if (!is.matrix(p)) p <- as.matrix(p)
-	y <- .Call(odeiv_outer_sens,name,experiments,p,abs.tol,rel.tol,initial.step.size)
+	y <- .Call(odeiv_outer_sens,name,experiments,p,abs.tol,rel.tol,initial.step.size,method)
 	for (i in seq_along(experiments)){
 		if ("initialState" %in% names(experiments[[i]])){
 			dimnames(y[[i]]$state) <- list(names(experiments[[i]]$initialState),NULL,NULL)
@@ -147,7 +238,7 @@ r_gsl_odeiv2_outer_sens <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5
 #' u <- c(0,0)
 #' e <- list(time=t,input=u,initial_value=y0)
 #' y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
-r_gsl_odeiv2_outer_state_only <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3){
+r_gsl_odeiv2_outer_state_only <- function(name,experiments,p,abs.tol=1e-6,rel.tol=1e-5,initial.step.size=1e-3,method=0){
 	if (is.character(comment(name))){
 		so <- comment(name)
 	} else {
@@ -156,7 +247,7 @@ r_gsl_odeiv2_outer_state_only <- function(name,experiments,p,abs.tol=1e-6,rel.to
 	}
 	stopifnot(file.exists(so))
 	if (!is.matrix(p)) p <- as.matrix(p)
-	y <- .Call(odeiv_outer_state,name,experiments,p,abs.tol,rel.tol,initial.step.size)
+	y <- .Call(odeiv_outer_state,name,experiments,p,abs.tol,rel.tol,initial.step.size,method)
 	for (i in seq_along(experiments)){
 		if ("initialState" %in% names(experiments[[i]])){
 			dimnames(y[[i]]$state) <- list(names(experiments[[i]]$initialState),NULL,NULL)

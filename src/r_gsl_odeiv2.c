@@ -221,7 +221,6 @@ apply_tf(affine_tf *L, /* a transformation struct: A and b are cast to gsl_vecto
 }
 
 struct event* event_from_R(Rdata E){
-	int j;
 	if (E == R_NilValue) return NULL;
 	if (!IS_VECTOR(E)) return NULL;
 	Rdata tf=from_list(E,"tf");
@@ -831,9 +830,14 @@ void update_initial_values(gsl_vector *y0, gsl_odeiv2_system sys, Rdata iv){
 }
 
 
-void set_names(Rdata list, const char *names[], size_t n)
+void set_names(Rdata list, const char *names[])
 {
-	int i;
+	int i=0;
+	size_t n=0;
+	while (names && names[i++]){
+		n++;
+	}
+	if (n==0) return;
 	Rdata rnames=PROTECT(allocVector(STRSXP, n));
 	Rdata elt;
 	for (i=0;i<n;i++){
@@ -1023,9 +1027,12 @@ r_gsl_odeiv2_outer_state_only(
  Rdata parameters, /* a matrix of parameterization columns*/
  Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
  Rdata relative_tolerance, /* relative tolerance for GSL's solver */
- Rdata initial_step_size) /* initial guess for the step size */
+ Rdata initial_step_size, /* initial guess for the step size */
+ Rdata method) /* integration method (integer) */
 {
 	gsl_set_error_handler_off();
+	/* all integrators in reverse order */
+	const gsl_odeiv2_step_type* step_types[] = {gsl_odeiv2_step_msbdf, gsl_odeiv2_step_msadams, gsl_odeiv2_step_bsimp, gsl_odeiv2_step_rk4imp, gsl_odeiv2_step_rk2imp, gsl_odeiv2_step_rk1imp, gsl_odeiv2_step_rk8pd, gsl_odeiv2_step_rkck, gsl_odeiv2_step_rkf45, gsl_odeiv2_step_rk4, gsl_odeiv2_step_rk2, NULL};
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,k;
@@ -1034,13 +1041,14 @@ r_gsl_odeiv2_outer_state_only(
 	double h=asReal(initial_step_size);
 	int N=GET_LENGTH(experiments);
 	size_t M=ncols(parameters);
-	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
-
+	const gsl_odeiv2_step_type * T=step_types[asInteger(method)];
+	int status=GSL_SUCCESS;
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
-	Rdata yf_list, Y, iv, t;
+	Rdata yf_list, Y, iv, t, cpuSeconds;
 	double t0;
-	const char *yf_names[1]={"state"};
+	clock_t ct0, ct1;
+	const char *yf_names[]={"state","cpuSeconds",NULL};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t ny, nt;
@@ -1066,12 +1074,14 @@ r_gsl_odeiv2_outer_state_only(
 		ny = Y0->size2;
 		time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+		cpuSeconds=PROTECT(NEW_NUMERIC(M));
 		for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
 		for (k=0;k<M;k++){
 			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
 			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+nrows(parameters)*k, nrows(parameters)*sizeof(double));
 			update_initial_values(&initial_value.vector, sys, iv); // in case system parameters have an effect on them
-			simulate_timeseries(
+			ct0=clock();
+			status|=simulate_timeseries(
 				sys,
 				driver,
 				t0,
@@ -1080,15 +1090,19 @@ r_gsl_odeiv2_outer_state_only(
 				ev,
 				&(y.matrix)
 			);
+			ct1=clock();
+			REAL(cpuSeconds)[k]=sec(ct1-ct0);
 		}
-		yf_list=PROTECT(NEW_LIST(1));
+		yf_list=PROTECT(NEW_LIST(2));
 		SET_VECTOR_ELT(yf_list,0,Y);
-		set_names(yf_list,yf_names,1);
+		SET_VECTOR_ELT(yf_list,1,cpuSeconds);
+		set_names(yf_list,yf_names);
 		SET_VECTOR_ELT(res_list,i,yf_list);
 		event_free(&ev);
 
 		UNPROTECT(1); /* yf_list */
 		UNPROTECT(1); /* Y */
+		UNPROTECT(1); /* cpuSeconds */
 	} // experiments: 0 to N-1
 	gsl_matrix_free(P);
 	gsl_matrix_free(Y0);
@@ -1114,9 +1128,11 @@ r_gsl_odeiv2_outer_func(
  Rdata parameters, /* a matrix of parameterization columns*/
  Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
  Rdata relative_tolerance, /* relative tolerance for GSL's solver */
- Rdata initial_step_size) /* initial guess for the step size */
+ Rdata initial_step_size, /* initial guess for the step size */
+ Rdata method) /* integration method (integer) */
 {
 	gsl_set_error_handler_off();
+	const gsl_odeiv2_step_type* step_types[] = {gsl_odeiv2_step_msbdf, gsl_odeiv2_step_msadams, gsl_odeiv2_step_bsimp, gsl_odeiv2_step_rk4imp, gsl_odeiv2_step_rk2imp, gsl_odeiv2_step_rk1imp, gsl_odeiv2_step_rk8pd, gsl_odeiv2_step_rkck, gsl_odeiv2_step_rkf45, gsl_odeiv2_step_rk4, gsl_odeiv2_step_rk2, NULL};
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,k,status=GSL_SUCCESS;
@@ -1125,13 +1141,15 @@ r_gsl_odeiv2_outer_func(
 	double h=asReal(initial_step_size);
 	int N=GET_LENGTH(experiments);
 	size_t M=ncols(parameters);
-	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+	const gsl_odeiv2_step_type * T=step_types[asInteger(method)]; //gsl_odeiv2_step_msbdf;
 
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
 	Rdata yf_list, Y, F, iv, t;
 	double t0;
-	const char *yf_names[2]={"state","func"};
+	Rdata cpuSeconds;
+	clock_t ct0,ct1;
+	const char *yf_names[]={"state","func","cpuSeconds",NULL};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t nt;
@@ -1161,14 +1179,15 @@ r_gsl_odeiv2_outer_func(
 		time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
 		for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
-
+		cpuSeconds=PROTECT(NEW_NUMERIC(M));
 		F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
 		for (j=0;j<nf*nt*M;j++) REAL(F)[j]=NA_REAL;   /* initialize to NA */
 		for (k=0;k<M;k++){
 			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
 			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+nrows(parameters)*k, nrows(parameters)*sizeof(double));
 			update_initial_values(&initial_value.vector,sys,iv);
-			status=simulate_timeseries(
+			ct0 = clock();
+			status|=simulate_timeseries(
 				sys,
 				driver,
 				t0,
@@ -1177,6 +1196,8 @@ r_gsl_odeiv2_outer_func(
 				ev,
 				&(y.matrix)
 			);
+			ct1 = clock();
+			REAL(cpuSeconds)[k] = sec(ct1-ct0); // seconds from clock_t
 			if (status==GSL_SUCCESS) {
 				for (j=0;j<nt;j++){
 					f=REAL(F)+(0+j*nf+k*nf*nt);
@@ -1184,15 +1205,17 @@ r_gsl_odeiv2_outer_func(
 				}
 			}
 		}
-		yf_list=PROTECT(NEW_LIST(2));
+		yf_list=PROTECT(NEW_LIST(3));
 		SET_VECTOR_ELT(yf_list,0,Y);
 		SET_VECTOR_ELT(yf_list,1,F);
-		set_names(yf_list,yf_names,2);
+		SET_VECTOR_ELT(yf_list,2,cpuSeconds);
+		set_names(yf_list,yf_names);
 		SET_VECTOR_ELT(res_list,i,yf_list);
 		event_free(&ev);
 		UNPROTECT(1); /* yf_list */
 		UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
+		UNPROTECT(1); /* cpuSeconds */
 	} // experiments: 0 to N-1
 	gsl_matrix_free(P);
 	gsl_matrix_free(Y0);
@@ -1217,9 +1240,11 @@ r_gsl_odeiv2_outer_sens(
  Rdata parameters, /* a matrix of parameterization columns*/
  Rdata absolute_tolerance, /* absolute tolerance for GSL's solver */
  Rdata relative_tolerance, /* relative tolerance for GSL's solver */
- Rdata initial_step_size) /* initial guess for the step size */
+ Rdata initial_step_size, /* initial guess for the step size */
+ Rdata method) /* integration method (integer) */
 {
 	gsl_set_error_handler_off();
+	const gsl_odeiv2_step_type* step_types[] = {gsl_odeiv2_step_msbdf, gsl_odeiv2_step_msadams, gsl_odeiv2_step_bsimp, gsl_odeiv2_step_rk4imp, gsl_odeiv2_step_rk2imp, gsl_odeiv2_step_rk1imp, gsl_odeiv2_step_rk8pd, gsl_odeiv2_step_rkck, gsl_odeiv2_step_rkf45, gsl_odeiv2_step_rk4, gsl_odeiv2_step_rk2, NULL};
 	const char* model_so=CHAR(asChar(getAttrib(modelName,install("comment"))));
 	const char* model_name=CHAR(STRING_ELT(modelName,0));
 	int i,j,k,status=GSL_SUCCESS;
@@ -1228,13 +1253,14 @@ r_gsl_odeiv2_outer_sens(
 	double h=asReal(initial_step_size);
 	int N=GET_LENGTH(experiments);
 	size_t M=ncols(parameters);
-	const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+	const gsl_odeiv2_step_type * T=step_types[asInteger(method)]; //gsl_odeiv2_step_msbdf;
 
 	Rdata res_list = PROTECT(NEW_LIST(N)); /* use VECTOR_ELT and SET_VECTOR_ELT */
 	SET_NAMES(res_list,GET_NAMES(experiments));
-	Rdata yf_list, Y, F, iv, t;
+	Rdata yf_list, Y, F, iv, t, cpuSeconds;
 	double t0;
-	const char *yf_names[4]={"state","func","stateSensitivity","funcSensitivity"};
+	clock_t ct0, ct1;
+	const char *yf_names[]={"state","func","stateSensitivity","funcSensitivity","cpuSeconds",NULL};
 	gsl_vector_view initial_value, time;
 	gsl_matrix_view y;
 	size_t nt;
@@ -1270,6 +1296,7 @@ r_gsl_odeiv2_outer_sens(
 		time=gsl_vector_view_array(REAL(AS_NUMERIC(t)),nt);
 		ny = Y0->size2;
 		Y=PROTECT(alloc3DArray(REALSXP,ny,nt,M));
+		cpuSeconds=PROTECT(NEW_NUMERIC(M));
 		for (j=0; j<ny*nt*M; j++) REAL(Y)[j]=NA_REAL; /* initialize to NA */
 		F=PROTECT(alloc3DArray(REALSXP,nf,nt,M));
 		SY=PROTECT(NEW_LIST(M));
@@ -1279,7 +1306,8 @@ r_gsl_odeiv2_outer_sens(
 			y=gsl_matrix_view_array(REAL(AS_NUMERIC(Y))+(nt*ny*k),nt,ny);
 			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+nrows(parameters)*k, nrows(parameters)*sizeof(double));
 			update_initial_values(&initial_value.vector,sys,iv);
-			status=simulate_timeseries(
+			ct0=clock();
+			status|=simulate_timeseries(
 				sys,
 				driver,
 				t0,
@@ -1288,6 +1316,8 @@ r_gsl_odeiv2_outer_sens(
 				ev,
 				&(y.matrix)
 			);
+			ct1=clock();
+			REAL(cpuSeconds)[k] = sec(ct1-ct0);
 			sy_k=PROTECT(alloc3DArray(REALSXP,ny,np,nt));
 			sf_k=PROTECT(alloc3DArray(REALSXP,nf,np,nt));
 			if (status==GSL_SUCCESS) {
@@ -1302,12 +1332,13 @@ r_gsl_odeiv2_outer_sens(
 			SET_VECTOR_ELT(SF,k,sf_k);
 			UNPROTECT(2); // sy_k, sf_k;
 		}
-		yf_list=PROTECT(NEW_LIST(4));
+		yf_list=PROTECT(NEW_LIST(5));
 		SET_VECTOR_ELT(yf_list,0,Y);
 		SET_VECTOR_ELT(yf_list,1,F);
 		SET_VECTOR_ELT(yf_list,2,SY);
 		SET_VECTOR_ELT(yf_list,3,SF);
-		set_names(yf_list,yf_names,4);
+		SET_VECTOR_ELT(yf_list,4,cpuSeconds);
+		set_names(yf_list,yf_names);
 		SET_VECTOR_ELT(res_list,i,yf_list);
 		event_free(&ev);
 
@@ -1315,6 +1346,7 @@ r_gsl_odeiv2_outer_sens(
 		UNPROTECT(2); /* SY, SF */
 		UNPROTECT(1); /* F */
 		UNPROTECT(1); /* Y */
+		UNPROTECT(1); /* cpuSeconds */
 #ifdef DEBUG_PRINT
 		if (status!=GSL_SUCCESS){
 			fprintf(stderr,"[%s] parameter set lead to solver errors (%s) in experiment %i/%i, values:\n",__func__,gsl_strerror(status),i,N);
