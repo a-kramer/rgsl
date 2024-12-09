@@ -1,6 +1,8 @@
 # Excerpt from the official documentation
 
-GSL solvers for Ordinary Differential Equations (ODEs) are documented on [www.gnu.org](https://www.gnu.org/software/gsl/doc/html/ode-initval.html). 
+GSL solvers for Ordinary Differential Equations (ODEs) are documented
+on
+[www.gnu.org](https://www.gnu.org/software/gsl/doc/html/ode-initval.html).
 
 This package has two utility functions to select the integration method:
 
@@ -12,9 +14,9 @@ rgsl::nameMethod(0) == "msbdf"
 The value of `integrationMethod` can be used here:
 
 ```R
-rgsl::r_gsl_outer(...,method=integrationMethod("msbdf"))
-rgsl::r_gsl_outer_sens(...,method=integrationMethod("rkf45"))
-rgsl::r_gsl_outer_state_only(...,method=integrationMethod("msadams"))
+rgsl::r_gsl_odeiv2_outer(...,method=integrationMethod("msbdf"))
+rgsl::r_gsl_odeiv2_outer_sens(...,method=integrationMethod("rkf45"))
+rgsl::r_gsl_odeiv2_outer_state_only(...,method=integrationMethod("msadams"))
 ```
 
 ## rk2
@@ -31,7 +33,9 @@ Explicit embedded Runge-Kutta (2, 3) method.
 gsl_odeiv2_step_type *gsl_odeiv2_step_rk4
 ```
 
-Explicit 4th order (classical) Runge-Kutta. Error estimation is carried out by the step doubling method. For more efficient estimate of the error, use the embedded methods described below.
+Explicit 4th order (classical) Runge-Kutta. Error estimation is
+carried out by the step doubling method. For more efficient estimate
+of the error, use the embedded methods described below.
 
 ## rkf45
 
@@ -39,7 +43,8 @@ Explicit 4th order (classical) Runge-Kutta. Error estimation is carried out by t
 gsl_odeiv2_step_type *gsl_odeiv2_step_rkf45
 ```
 
-Explicit embedded Runge-Kutta-Fehlberg (4, 5) method. This method is a good general-purpose integrator.
+Explicit embedded Runge-Kutta-Fehlberg (4, 5) method. This method is a
+good general-purpose integrator.
 
 ## rkck
 
@@ -63,7 +68,10 @@ Explicit embedded Runge-Kutta Prince-Dormand (8, 9) method.
 gsl_odeiv2_step_type *gsl_odeiv2_step_rk1imp
 ```
 
-Implicit Gaussian first order Runge-Kutta. Also known as implicit Euler or backward Euler method. Error estimation is carried out by the step doubling method. This algorithm requires the Jacobian and access to the driver object via gsl_odeiv2_step_set_driver().
+Implicit Gaussian first order Runge-Kutta. Also known as implicit
+Euler or backward Euler method. Error estimation is carried out by the
+step doubling method. This algorithm requires the Jacobian and access
+to the driver object via `gsl_odeiv2_step_set_driver()`.
 
 ## rk2imp
 
@@ -71,7 +79,10 @@ Implicit Gaussian first order Runge-Kutta. Also known as implicit Euler or backw
 gsl_odeiv2_step_type *gsl_odeiv2_step_rk2imp
 ```
 
-Implicit Gaussian second order Runge-Kutta. Also known as implicit mid-point rule. Error estimation is carried out by the step doubling method. This stepper requires the Jacobian and access to the driver object via gsl_odeiv2_step_set_driver().
+Implicit Gaussian second order Runge-Kutta. Also known as implicit
+mid-point rule. Error estimation is carried out by the step doubling
+method. This stepper requires the Jacobian and access to the driver
+object via `gsl_odeiv2_step_set_driver()`.
 
 ## rk4imp
 
@@ -79,7 +90,9 @@ Implicit Gaussian second order Runge-Kutta. Also known as implicit mid-point rul
 gsl_odeiv2_step_type *gsl_odeiv2_step_rk4imp
 ```
 
-Implicit Gaussian 4th order Runge-Kutta. Error estimation is carried out by the step doubling method. This algorithm requires the Jacobian and access to the driver object via gsl_odeiv2_step_set_driver().
+Implicit Gaussian 4th order Runge-Kutta. Error estimation is carried
+out by the step doubling method. This algorithm requires the Jacobian
+and access to the driver object via `gsl_odeiv2_step_set_driver()`.
 
 ## bsimp
 
@@ -87,7 +100,9 @@ Implicit Gaussian 4th order Runge-Kutta. Error estimation is carried out by the 
 gsl_odeiv2_step_type *gsl_odeiv2_step_bsimp
 ```
 
-Implicit Bulirsch-Stoer method of Bader and Deuflhard. The method is generally suitable for stiff problems. This stepper requires the Jacobian.
+Implicit Bulirsch-Stoer method of Bader and Deuflhard. The method is
+generally suitable for stiff problems. This stepper requires the
+Jacobian.
 
 ## msadams
 
@@ -95,7 +110,12 @@ Implicit Bulirsch-Stoer method of Bader and Deuflhard. The method is generally s
 gsl_odeiv2_step_type *gsl_odeiv2_step_msadams
 ```
 
-A variable-coefficient linear multistep Adams method in Nordsieck form. This stepper uses explicit Adams-Bashforth (predictor) and implicit Adams-Moulton (corrector) methods in P(EC)^m functional iteration mode. Method order varies dynamically between 1 and 12. This stepper requires the access to the driver object via gsl_odeiv2_step_set_driver().
+A variable-coefficient linear multistep Adams method in Nordsieck
+form. This stepper uses explicit Adams-Bashforth (predictor) and
+implicit Adams-Moulton (corrector) methods in $P(EC)^m$ functional
+iteration mode. Method order varies dynamically between 1 and 12. This
+stepper requires the access to the driver object via
+`gsl_odeiv2_step_set_driver()`.
 
 ## msbdf
 
@@ -103,7 +123,14 @@ A variable-coefficient linear multistep Adams method in Nordsieck form. This ste
 gsl_odeiv2_step_type *gsl_odeiv2_step_msbdf
 ```
 
-A variable-coefficient linear multistep backward differentiation formula (BDF) method in Nordsieck form. This stepper uses the explicit BDF formula as predictor and implicit BDF formula as corrector. A modified Newton iteration method is used to solve the system of non-linear equations. Method order varies dynamically between 1 and 5. The method is generally suitable for stiff problems. This stepper requires the Jacobian and the access to the driver object via gsl_odeiv2_step_set_driver().
+A variable-coefficient linear multistep backward differentiation
+formula (BDF) method in Nordsieck form. This stepper uses the explicit
+BDF formula as predictor and implicit BDF formula as corrector. A
+modified Newton iteration method is used to solve the system of
+non-linear equations. Method order varies dynamically between 1
+and 5. The method is generally suitable for stiff problems. This
+stepper requires the Jacobian and the access to the driver object via
+`gsl_odeiv2_step_set_driver()`.
 
 # List of all integrators in reverse order
 

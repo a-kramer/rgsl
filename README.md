@@ -1,15 +1,18 @@
 # rgsl - an interface between R and gsl_odeiv2
 
-This R package solves a series of initial value problems given as an
-[ordinary differential equation](MODELS.md), an initial state and a numerical
-parameter vector.
+This R package solves a series of initial value problems for ordinary
+differential equations formulated as a list of simulation
+experiments to be integrated using [C-functions](MODELS.md).
 
-This project was [funded by the EU](./ACKNOWLEDGMENTS.md) as part of the [Human Brain Project](https://www.humanbrainproject.eu/en/) and supported by [EBRAINS](https://ebrains.eu/) infrastructure.
+This project was [funded by the EU](./ACKNOWLEDGMENTS.md) as part of
+the [Human Brain Project](https://www.humanbrainproject.eu/en/) and
+supported by [EBRAINS](https://ebrains.eu/) infrastructure.
 
 The 2 in `odeiv2` is from the GSL, there is no older R package of this
 name.
 
-The [integration methods](./integrators.md) (stepping functions) are also described in the official documentation.
+The [integration methods](./integrators.md) (stepping functions) we interface with are
+also described in the official [documentation](https://www.gnu.org/software/gsl/doc/html/ode-initval.html).
 
 To [install](INSTALL.md):
 
@@ -24,6 +27,16 @@ OR
 remotes::install_github("icpm-kth/rgsl") # official fork
 ```
 
+### Note on Operating Systems
+
+This package will work on UNIX-like systems (GNU Linux, BSD, MACOS),
+but almost certainly not on windows, because of the shared libraries,
+compilers, etc.
+
+This is not just plain R code.
+
+It may work coincidentally, but we have not tried.
+
 ## Description and Purpose
 
 The C code calls
@@ -34,135 +47,114 @@ minimal. That is why this package expects to solve a set of problems,
 rather than one, for the same model file (varying in e.g.: initial
 conditions, or parameters).
 
-The package contains 3 interface functions, they accept different ways
-of defining a set of problems,each with their own drawbacks and
-advantages. The interface functions are described in the following
-Sections.
+The package contains only high-level interface functions, each
+interface function returns a list of solutions. The interface
+functions are described in the following Sections.
 
-The ODE has to exist as a [shared library](MODELS.md) (`.so`) file (currently in
-the current working directory: `?setwd` and `?getwd`). There are some
-assumptions we make about the contents of the shared library file.
+The ODE has to exist as a [shared library](MODELS.md) (`.so`)
+file. There are some assumptions we make about the contents of the
+shared library file, and the naming of the functions.
 
 Here we assume that the solutions serve some scientific purpose and
-the lab experiments come with _observables_, some measureable values
-that depend on the system's state (but are not the full state
-vector). We call the part of the model that calculates the observables
-`${ModelName}_func()` (vfgen also calls them *Functions* of the model). 
+the lab experiments come with a description of _observables_: measureable values
+that depend on the system's state. We call the part of the model that calculates the observables
+`${ModelName}_func()` (vfgen also calls them *Functions* of the model).
 
 ### Note
 
-This package cannot use an ODE written in R, which the reader
-may consider impractical. For plain R models, there is of course
+We aim to find the perfect balance between speed and
+feasibility. This package cannot use an ODE written in R, which the
+reader may consider impractical, but it is faster. For plain R
+models, there is of course
 [deSolve](https://cran.r-project.org/web/packages/deSolve/) that
-remains an alternative. Our goal is to auto-generate the shared
+remains an alternative. Our strategy is to auto-generate the shared
 library whenever possible and avoid writing the model files by
-hand. This package does not do this in any way, but
-[vfgen](https://warrenweckesser.github.io/vfgen/) does. Any
-method of auto-generating code will do, as long as it creates somewhat
-compatible c files. We use [icpm-kth/RPN-derivative](icpm-kth/RPN-derivative).
+hand. This package does not itself auto-generate code, but
+[vfgen](https://warrenweckesser.github.io/vfgen/) does. Any method of
+auto-generating code will do, as long as it creates somewhat
+compatible c files. We use
+[icpm-kth/RPN-derivative](icpm-kth/RPN-derivative).
 
-## Interface function `r_gsl_odeiv2`
+The GSL
+[odeiv2](https://www.gnu.org/software/gsl/doc/html/ode-initval.html)
+module is well documented. In addition, we have decided on this rule:
+the C functions return the number of principal return values, when
+called with `NULL` pointers.
 
-The [purpose](PURPOSE.md) of this interface is very similar to the
-others, and is easiest to use for simple problems.
+We have considiered the SUNDIALS solvers like Cvode, but they turned
+out too complex for us, the documentation is difficult to read, and
+the types, macros, and function names change with major versions. We
+consider it not feasible (for us) to maintain an interface to Cvode
+and chose the GSL solvers instead.
 
-Usage:
-
-```R
-library("rgsl")
-
-ny <- 3
-np <- 4
-nt <- 100
-m <- 20
-t0 <- -1
-t <- seq(0,1,length.out=nt)
-y0 <- matrix(c(1,2,3),nrow=ny,ncol=m)
-p <- matrix( ... ,nrow=np,ncol=m)
-
-experiments <- list(
-  a=list(initialState=y0, outputTimes=t, initialTime=t0, input=c(1,2)),
-  b=list(initialState=y0, outputTimes=t, initialTime=t0, input=c(0,0))
-)
-y <- r_gsl_odeiv2_outer("ModelName",experiments,p)
-```
-
-This will simulate an outer product of simulation `experiments` with every column of `p`.
-
-The function `r_gsl_odeiv2_outer()` will look for the file `ModelName.so` in
-the current directory. Otherwise, a specific file-path can be selected using a `comment` on the model name:
-
-```R
-modelName <- "apoptosis"
-comment(modelName) <- "../apoptosis.so"
-```
-
-The parameters can be an _n×m_ matrix of several parameterisations
-(each column is a distinct parameter vector of length _n_). 
-
-The solver will be looped _m_ times (using each column) within the C
-code.
-
-The simulations can be more intricate if the [event system](EVENTS.md) is used.
-
-### Returns
-
-A 3-dimensional array `y` of size _ny×nt×m_ (state, time, parameter set).
-
-### Usage Notes
-
-The time `t` is a vector of output time-points.
-
-The parameters `p` must be numeric (not some arbitrary content passed
-to the ODE right-hand-side functions).
-
-## List of Experiments
+## List of Experiments `gsl_odeiv2_outer` and `gsl_odeiv2_outer_state_only`
 
 This interface assumes that the user has a list of *N* simulation
 experiments and uses this call structure:
 
 ```R
 library("rgsl")
-y<-r_gsl_odeiv2_outer(NameOfModel,experiments)
+comment(NameOfModel) <- "path/to/sharedLibrary.so"  # optional
+y <- r_gsl_odeiv2_outer(NameOfModel,experiments,p)
 ```
 
-Each list item is a list of named properties that define a simulation
+Where `p` refers to the parameters of the model. This may be a matrix
+of _M_ parameter vectors, each column will result in a simulation of
+every experiment. The result is the outer product of _M_×_M_
+simulations.
+
+Each list item of `experiments` is itself a list of named properties that define a simulation
 run, e.g.:
 
 ```R
 experiments[[1]][["time"]] <- seq(0,1,length.out=100)
 experiments[[1]][["initial_value"]] <- c(0,0,0)
-experiments[[1]][["parameters"]] <- c(1,2,3,4,5)
+experiments[[1]][["input"]] <- c(1,2,3,4,5)
 ```
 
-The entries are found by their name, so they naming is not arbitrary
+The entries are found by name, so their naming is not arbitrary
 (but there are some alternative spellings):
 
 |                           name | optional | meaning                           |
 |-------------------------------:|:--------:|:----------------------------------|
 |           `time`,`outputTimes` | no       | output time                       |
 | `initial_value`,`initialState` | no       | a state space vector `y(t=t0)`    |
-|     `parameters`,`param`,`par` | no       | a numeric vector of parameters    |
 |     `events`,`scheduledEvents` | yes      | an event description for this run |
+|                        `input` | yes      | additional parameters             |
 
-This interface is useful whenever your problem lends itself to this
-description.
+The model knows how many parameters it needs to simulate, it uses the
+suuplied parameter matrix `p` to fill the internal parameter buffer
+from the front and the input parameters from the `experiments` to fill
+the buffer from the back. In the normal case, these parameters complement each other:
 
-Particularly, if you want to simulate a subset of experiments, you can
-remove unwanted items from the list easily (which is not as easy with
-plain `r_gsl_odeiv2()`, see above).
+```R
+# something like this will happen in the C code, but with memcpy()
+# p: supplied parameters
+# u: input parameters
+modelPar <- c(p,u) # effective model parameters
+```
+
+The idea is that `p` represents the model's internal parameters and
+the values come from optimization, sampling, or various competing
+model hypotheses; but the input parameters `u` are related to the
+actual experiments. These input parameters are what makes several
+experiments different (in addition to initial values and scheduled
+events).
+
+It is easy to simulate a subset of experiments by subsetting the experiments list.
+If the experiments are named then so is the return value.
 
 ### Returns
 
 a list `y` of the same size as the experiment list, each entry has a
-`[["state"]]` component and often a `[["func"]]` (unless specifically
-suppressed) component (it is filled in if `_func` exists). Each
-`y[[i]]$state` is a 3d-array, where the second index corresponds to
-the output time points and the third enumerates the different
-parameter vectors (possibly only 1).
+`[["state"]]` component and a `[["func"]]` (the function
+`r_gsl_odeiv2_outer_state_only` suppresses this) component (it is
+filled in if `_func` exists). Each `y[[i]]$state` is a 3d-array, where
+the second index corresponds to the output time points and the third
+enumerates the _M_ different parameter vectors (possibly only 1).
 
 The `func` component contains the output functions, as calculated by
-the `${MODEL}_func` function. If that function is undefined, use 
+the `${MODEL}_func` function. If that function is undefined, use
 
 ```R
 rgsl::r_gsl_odeiv2_outer_state_only # ${MODEL}_func is not used
@@ -179,16 +171,6 @@ rgsl::r_gsl_odeiv2_outer_state_only # ${MODEL}_func is not used
     + `time` event occurence times (nt)
     + `label` transformation label, a 0-based offset (used as `int`) which selects the transformation to apply
     + `dose` a scalar floating point variable (used as `double`)
-
-### Returns
-
-a list `y` of the same size as the experiment list, each entry has a
-`[["state"]]` component and a `[["func"]]` component (it is filled in
-if `_func` exists). Each `y[[i]][["state"]]` is a 3d array, where the
-last dimension corresponds to the columns of `parameters`.
-
-The `func` component contains the output functions, as calculated by
-the `${MODEL}_func` function.
 
 ## SBtabVFGEN
 

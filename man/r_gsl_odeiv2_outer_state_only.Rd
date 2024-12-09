@@ -15,6 +15,8 @@ r_gsl_odeiv2_outer_state_only(
 )
 }
 \arguments{
+\item{name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
+
 \item{experiments}{a list of N simulation experiments (time, parameters, initial value, events)}
 
 \item{p}{a matrix of parameters with M columns}
@@ -24,26 +26,21 @@ r_gsl_odeiv2_outer_state_only(
 \item{rel.tol}{relative tolerance (one real number, defaults to 1e-5)}
 
 \item{initial.step.size}{initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3}
-
-\item{model_name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
 }
 \value{
-the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
+a list with solution trajectories y(t;p) for all experiments
 }
 \description{
 This is a wrapper. It uses the .Call function to call the C
-function r_gsl_odeiv2_outer(). The C program solves a set of ODE
-intial value problems and returns the trajectory y(t;p) for every
-real valued parameter vector p. We use the solvers from the GNU
-Scientific Library module odeiv2. This is similar to
-\code{r_gsl_odeiv2_outer} but does not return (or evaluate) the system's
-output function (model_func()).
+implementation. The C program solves a set of ODE intial value
+problems and returns the trajectory y(t;p) for every real valued
+parameter vector p. We use the solvers from the GNU Scientific
+Library module odeiv2. This is similar to \code{r_gsl_odeiv2_outer} but
+does not return (or evaluate) the system's output function
+(MODEL_func()).
 }
-\examples{
-y0 <- c(0,1)
-t <- seq(0,1,length.out=100)
-u <- c(0,0)
-e <- list(time=t,input=u,initial_value=y0)
-y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
+\details{
+Details: the c-code can be found in the \code{src/r_gsl_odeiv2.c}, the C
+function is called \code{r_gsl_odeiv2_outer_state_only()}.
 }
 \keyword{ODE}

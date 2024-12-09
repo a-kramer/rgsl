@@ -2,7 +2,7 @@
 % Please edit documentation in R/r_gsl_odeiv2.R
 \name{r_gsl_odeiv2_outer_sens}
 \alias{r_gsl_odeiv2_outer_sens}
-\title{Initial Value Problem solution in C}
+\title{Initial Value Problem solution in C with sensitivity approximation}
 \usage{
 r_gsl_odeiv2_outer_sens(
   name,
@@ -15,36 +15,67 @@ r_gsl_odeiv2_outer_sens(
 )
 }
 \arguments{
-\item{experiments}{a list of N simulation experiments (time, parameters, initial value, events)}
+\item{experiments}{a list of N simulation experiments (time,
+parameters, initial value, events)}
 
-\item{p}{a matrix of parameters with M columns}
+\item{p}{a matrix of parameters with M columns, possibly 1}
 
-\item{abs.tol}{absolute tolerance (one real number, defaults to 1e-6)}
+\item{abs.tol}{absolute tolerance, scalar of type double (numeric)}
 
-\item{rel.tol}{relative tolerance (one real number, defaults to 1e-5)}
+\item{rel.tol}{relative tolerance, scalar of type double (numeric)}
 
-\item{initial.step.size}{initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3}
+\item{initial.step.size}{initial value for the step size; the step
+size will \emph{adapt} to a value that observes the tolerances; real
+scalar}
 
-\item{model_name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
+\item{model_name}{the name of the ODE model to simulate (a shared
+library of the same name will be dynamically loaded and needs
+to be created first)}
 }
 \value{
-the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
+a list containing the solution trajectories y(t;p) for all
+experiments (named like the experiments), as well as the output
+functions, and the sensitivities of both. The sensitivities are
+returned as a list of 3d-arrays, where the list index
+enumerates the different columns of \code{p}, the sensitivities have
+the structure \code{stateSensitivity[[l]][i,j,k]}, where i is for
+the state-variables/functions, j is for the parameter index in
+$dy_i/dx_j$, and k is for time; and finally \code{l} is for the
+different columns of \code{p}.
 }
 \description{
 This is a wrapper. It uses the .Call function to call the C
 function r_gsl_odeiv2_outer(). The C program solves a set of ODE
 intial value problems and returns the trajectory y(t;p) for every
-real valued parameter vector p. We use the solvers from the GNU
-Scientific Library module odeiv2. This function is similar to
-\code{r_gsl_odeiv2_outer}, but also estimates the sensitivity of the
-solution: dx/dp (how would the solution change with slightly
-different parameters).
+real valued parameter vector p (column of a matrix). We use the
+solvers from the GNU Scientific Library module odeiv2. This
+function is similar to \code{r_gsl_odeiv2_outer}, but also estimates the
+sensitivity of the solution: dx/dp (i.e.: how would the solution
+change with slightly different parameters). For all functions in
+this package, it is important to understand that we aim to solve
+the model for several parameter vectors in one go. For this reason,
+\code{p} is a matrix, even though each simulation only needs a vector
+\code{p[,l]} (wich 1<l<=M). The returned value represents the outer
+product of simulation experiments and columns of \code{p}: (N * M)
+solutions.
 }
 \details{
 The returned list also contains the items "stateSensitivity" and
 "funcSensitivity". Calculating sensitivities takes much more time
 than evaluating the output functions, so this version of the solver
-treats output functions as mandatory.
+treats output functions as mandatory and there is no 'state_only'
+version of this.
+
+A test for the quality of the sensitivity approximation is
+calculating the relative error $E$ of a small shift in parameters
+$\delta$:
+
+$$\frac{\| y(t;p+\delta) - (y(t;p) + S(t;p) \delta) \|}{\| y(t;p) \|} = E(t;p)\,,$$
+
+where $\delta$ is a small change in parameters (e.g. a Gaussian
+random vector with $\mu=0$). $E$ can be calculated with only one
+additional simulation; whenever $E(t;p)$ is small, then the
+sensitivity approximation has worked.
 }
 \examples{
 y0 <- c(0,1)

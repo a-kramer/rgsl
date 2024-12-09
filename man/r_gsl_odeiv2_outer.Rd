@@ -15,26 +15,26 @@ r_gsl_odeiv2_outer(
 )
 }
 \arguments{
-\item{experiments}{a list of N simulation experiments (time, parameters, initial value, events)}
+\item{name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
+
+\item{experiments}{a list of \code{N} simulation experiments (time, parameters, initial value, events)}
 
 \item{p}{a matrix of parameters with M columns}
 
-\item{abs.tol}{absolute tolerance (one real number, defaults to 1e-6)}
+\item{abs.tol}{absolute tolerance, real scalar}
 
-\item{rel.tol}{relative tolerance (one real number, defaults to 1e-5)}
+\item{rel.tol}{relative tolerance, real scalar}
 
-\item{initial.step.size}{initial value for the step size; the step size will adapt to a value that observes the tolerances; defaults to 1e-3}
-
-\item{model_name}{the name of the ODE model to simulate (a shared library of the same name will be dynamically loaded and needs to be created first)}
+\item{initial.step.size}{initial value for the step size; the step size will adapt to a value that observes the tolerances, real scalar}
 }
 \value{
-the solution trajectories y(t;p) for all experiments, as well as the output functions (if MODEL_func() is present in the .so file)
+a list of the solution trajectories \verb{y(t;p)} for all experiments (named like the experiments), as well as the output functions
 }
 \description{
 This is a wrapper. It uses the .Call function to call the C
-function r_gsl_odeiv2_outer(). The C program solves a set of ODE intial
-value problems and returns the trajectory y(t;p) for every real
-valued parameter vector p. We use the solvers from the GNU
+function \code{r_gsl_odeiv2_outer()}. The C program solves a set of ODE intial
+value problems and returns the trajectory \verb{y(t;p)} for every real
+valued parameter vector \code{p}. We use the solvers from the GNU
 Scientific Library module odeiv2.
 }
 \details{
@@ -44,20 +44,13 @@ matrix. The output is an N-sized list of 3 dimensional arrays y,
 with y\link{i,j,k} corresponding to state variable i, time t\link{j}, and
 parameter set p\link{,k}.
 
-The model may have output functions that model observable
-quantities of a system, the c-source can include a function with a
-name ending in "_func" (e.g. mymodel.so with
+The model must have output functions (observable quantities of a
+system), the C-source can include a function with a name ending in
+"_func" (e.g. mymodel.so with
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{int mymodel_func(double t, double y[], double fout[], void *p)
 }\if{html}{\out{</div>}}
 
 where fout will contain the output-function values after the call).
-}
-\examples{
-y0 <- c(0,1)
-t <- seq(0,1,length.out=100)
-u <- c(0,0)
-e <- list(time=t,input=u,initial_value=y0)
-y <- r_gsl_odeiv2_outer("HarmonicOscillator",t,y0,p=matrix(seq(0,1,length.out=3),ncol=3))
 }
 \keyword{ODE}

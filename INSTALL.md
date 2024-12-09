@@ -1,4 +1,4 @@
-# Install
+# Installation Instructions
 
 Using the `remotes` package:
 
@@ -6,7 +6,11 @@ Using the `remotes` package:
 remotes::install_github("a-kramer/rgsl")
 ```
 
-Ensure that the [GNU Scientific Library](https://www.gnu.org/software/gsl/doc/html/index.html) (gsl) is installed in your system and pkg-config can find it:
+Ensure that the [GNU Scientific
+Library](https://www.gnu.org/software/gsl/doc/html/index.html) (gsl)
+is installed in your system and
+[pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/) or
+[pkgconf](http://pkgconf.org/) can find it:
 
 ```sh
 $ pkg-config --libs gsl
