@@ -122,6 +122,6 @@ Or use an early return, like RPN-derivative does.
 
 ## Example File
 
-See the example file [HarmonicOscillator](./HarmonicOscillator_gvf.c)
+See the example file [HarmonicOscillator](./inst/extdata/HarmonicOscillator_gvf.c)
 to inspect an auto-generated right-hand-side and Jacobian function
 compatible with the solvers from the gsl.
