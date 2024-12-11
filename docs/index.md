@@ -5,12 +5,6 @@ ordinary differential equation, an initial state and a numerical
 parameter vector. The C code calls [gsl odeiv2](https://www.gnu.org/software/gsl/doc/html/ode-initval.html)
 module functions to solve the problem or problems.
 
-The parameter vector can be replaced by an _n×m_ matrix of several
-parameterisations (each column is a distinct parameter vector). The
-solver wil be called _m_ times. 
-
-The result is returned to R as a 3-dimensional array.
-
 This project was [funded by the EU](./ACKNOWLEDGMENTS.md) as part of the [Human Brain Project](https://www.humanbrainproject.eu/en/) and supported by [EBRAINS](https://ebrains.eu/) infrastructure.
 
 ## Install
@@ -47,106 +41,172 @@ We think that it is helpful to distinguish between _constants_
 (parameters that never change), _unknown parameters_, and _input
 parameters_.
 
-|Type|Symbol|Description|
-|---:|:----:|:----------|
-|constants|NONE|never change, are built into the model |
-|unknown| k | may be inferred from data |
-|known| u | these distinguish different experiments |
+|      Type | Symbol | Description                             |
+|----------:|:------:|:----------------------------------------|
+| constants | NONE   | never change, are built into the model  |
+|   unknown | k      | may be inferred from data               |
+|     known | u      | these distinguish different experiments |
+
 
 The overall vector _p_ contains both the unknown _k_ and the known
-_u_, e.g. as `p=c(k,u)` (aka a direct sum). But any ordering is possible (here _c_ means
-concatenate, like in R).
+_u_, e.g. as `p=c(k,u)` (aka a direct sum). 
 
 To determine the parameters _k_, the model _f_ needs to be simulated
 in the provided experimental scenarios and the parameters are found
 through optimisation, or sampling (or perhaps another, similar
-method). 
+method).
 
 Typically, these methods need to solve the model many times. This is
 especially true for Bayesian methods (sampling). So, solving a batch
 of similar problems in one function call is desirable. In the next two
 Sections we discuss two common Scenarios.
 
-### MCMC sampling
+## Solver Calls
 
-Let us assume that we have obtained a data set _D_, that includes
-measured observables form different experiments. Each experiment is
-distinguished from the others by the values in the input to the model.
-
-The input may well be dynamic, and if it is, the model needs to
-contain the possible input dynamics within the model files. But, let
-us assume here that we can switch between input dynamics by setting
-specific input parameter values: *u₁, u₂, u₃, …*. We shall evaluate
-the model for a given suggested parameter vector _k_. Then we can
-construct a _p_ for each input: *p₁=c(k,u₁)*. Example R code:
+The high level solver interface functions assume that the user has a list of *N* simulation
+experiments and uses this call structure:
 
 ```R
-# two experiments, "Stim" and "Control"
-u<-load_inputs_from_file("my_file_of_inputs.dat")
-k<-c(1,0,2,3) # let's say this makes sense
-p<-matrix(c(k,u$Stim,k,u$Control),ncol=2)
-t=seq(0,10,length.out=12)
-y0=c(1,0,0) # initial state vector
-
-library(rgsl)
-y<-r_gsl_odeiv2("NameOfModel",t,y0,p)
-
-# the below plot will correspont to parameters c(k,u$Stim)
-plot(t,y[1,,1])
-# and this will be the ratio between Stim and Control:
-lines(t,y[1,,1]/y[1,,2])
+library("rgsl")
+comment(NameOfModel) <- "path/to/sharedLibrary.so"
+y <- r_gsl_odeiv2_outer(NameOfModel,experiments,p)
 ```
 
-The result is a three dimensional array _y_, where `y[i,j,l]`
-will be the state variable _i_ at time _j_ for parameter vector _l_.
+Where `p` refers to the parameters of the model. This may be a matrix
+of _M_ parameter vectors, each column will result in a simulation of
+every experiment. The result is the outer product of _M_×_M_
+simulations.
 
-### Sample Post-Processing
-
-Similarly, if an MCMC sample _K_ for a given model already exists, the
-user may want to simulate a prediction based on this sample. To do
-this the whole sample may be provided to the C solver used here and
-the result will be a batch of trajectories, one for each sampled
-parameter vector. The sample matrix _K_ is a set of column-vectors,
-each a valid parameterisation of the model. We want to predict the
-system's behaviour for a given input of interest: _u_.
-
-We construct a parameter matrix:
+Each list item of `experiments` is itself a list of named properties that define a simulation
+run, e.g.:
 
 ```R
-K<-load_sample_from_file("sample_file.hdf5")
-u<-c(1,2,3)
-n<-dim(K)
-P<-rbind(K,matrix(u,nrow=3,ncol=n(2)))
+experiments[[1]][["time"]] <- seq(0,1,length.out=100)
+experiments[[1]][["initial_value"]] <- c(0,0,0)
+experiments[[1]][["input"]] <- c(1,2,3,4,5)
 ```
 
-So, the input is now repeated for each column in _K_. Then we call the
-`r_gsl_odeiv2()` interface function to simulate the scenario _u_ for
-each parameter vector. The result is a matrix `y[,,l]` where `l` can
-be any number in the range `1:n(2)`.
+### Return Values
 
+a list `y` of the same size as the experiment list, each entry has a
+`[["state"]]` component and a `[["func"]]` (the function
+`r_gsl_odeiv2_outer_state_only` suppresses this) component (it is
+filled in if `_func` exists). Each `y[[i]]$state` is a 3d-array, where
+the second index corresponds to the output time points and the third
+enumerates the _M_ different parameter vectors (possibly only 1).
 
-### Models 
+The `func` component contains the output functions, as calculated by
+the `${MODEL}_func` function. If that function is undefined, use
+
+```R
+rgsl::r_gsl_odeiv2_outer_state_only # ${MODEL}_func is not used
+```
+
+### Structure of Simulation Experiments
+
+`experiments`:
+
+- `time` simulation output time
+- `initial_value` *y(t=t₀)*
+- `input` partial parameter vector
+- `events` OPTIONAL
+    + `time` event occurence times (nt)
+    + `label` transformation label, a 0-based offset (used as `int`) which selects the transformation to apply
+    + `dose` a scalar floating point variable (used as `double`)
+
+### Models
 
 This package requires the model to be provided as a shared library:
 `${MODEL}.so`. The function names within the file need to correspond to the model name:
 
-```bash
+```sh
 ${MODEL}_vf();
 ${MODEL}_jac();
 ```
 
+But, when calling the solvers in R,
+e.g.`r_gsl_odeiv2_outer(modelName,...)` the location of the shared
+library can be indicated through a comment on the modelName:
+
+```R
+modelName <- "HarmonicOscillator"
+comment(modelName) <- "../HaOs1.so"
+y <- r_gsl_odeiv2_outer(modelName,...)
+```
+
+Otherwise, the path defaults to: `paste0("./",modelName,".so")`
+
+The arguments of these functions conform to the [official GSL documentation](https://www.gnu.org/software/gsl/doc/html/ode-initval.html).
+
+The model functions can be generated by [icpm-kth/RPN-derivative/sh/ode.sh](icpm-kth/RPN-derivative):
+
+```C
+int $MODEL_vf(double t, const double y_[], double f_[], void *par)
+int $MODEL_event(double t, double y_[], void *par, int EventLabel, double dose)
+int $MODEL_jac(double t, const double y_[], double *jac_, double *dfdt_, void *par)
+int $MODEL_jacp(double t, const double y_[], double *jacp_, double *dfdt_, void *par)
+int $MODEL_func(double t, const double y_[], double *func_, void *par)
+int $MODEL_funcJac(double t, const double y_[], double *funcJac_, void *par)
+int $MODEL_funcJacp(double t, const double y_[], double *funcJacp_, void *par)
+int $MODEL_default(double t, void *par)
+int $MODEL_init(double t, double *y_, void *par)
+```
+
+where `event` can be called to perform a transformation, as described
+in the table of transformations, with `EventLabel` indicating which
+event to perform (a row offset, starting at `0`).
+
+We make some additional demands: when called with a `NULL` argument,
+the functions return the expected size of the
+output buffer:
+
+```C
+[...]
+size_t numPar=$MODEL_default(0,NULL);
+double p =  malloc(sizeof(double)*numPar);
+[...] // assign values to p
+size_t numStateVar=$MODEL_vf(0,NULL,NULL,NULL);
+double *y0 = malloc(sizeof(double)*numStateVar);
+double *v = malloc(sizeof(double)*numStateVar);
+[...] // assign values to y0
+$MODEL_vf(0,y0,v,par);
+```
+
+The above code is OK. But, there is usually no need to call these
+functions explicitly. It is only important to know that this is
+allowed and the shared library model functions must not crash when
+used like this.
+
+#### Enums
+
+For the most part, the functions access the elements of vectors using enums:
+
+```C
+enum stateVariable { _Cag, _Cal, ... , numStateVar }; /* state variable indexes  */
+```
+
+Similar enum definitions are made for parameters, events, and output functions:
+
+```C
+enum param { ... , numParam }; /* parameter indexes  */
+enum eventLabel { ... , numEvents }; /* event name indexes */
+enum func { ... , numFunc }; /* parameter indexes  */
+```
+
+They are used in the event function (in a switch) and in some of the other functions -- but, not in jacobians.
+
 ### Example File
 
-See the example file [HarmonicOscillator](./HarmonicOscillator_gvf.c)
+See the example file [HarmonicOscillator](./inst/extdata/HarmonicOscillator_gvf.c)
 to inspect an auto-generated right-hand-side and Jacobian function
 compatible with the solvers from the gsl.
 
-The example script [HarmonicOscillator.R](./HarmonicOscillator.R)
+The example script [HarmonicOscillator.R](./inst/extdata/HarmonicOscillator.R)
 contains a `demo()` function.
 
 These C code files (for the gsl module
 [odeiv2](https://www.gnu.org/software/gsl/doc/html/ode-initval.html))
-can be automatically obtained using from
+can be automatically obtained using from [icpm-kth/RPN-derivative](github.com/icpm-kth/RPN-derivative), 
 [VFGEN](https://github.com/WarrenWeckesser/vfgen) or written manually.
 
 ## SBtabVFGEN
