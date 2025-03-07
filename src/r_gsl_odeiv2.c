@@ -1081,7 +1081,7 @@ r_gsl_odeiv2_outer_state_only(
 			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+nrows(parameters)*k, nrows(parameters)*sizeof(double));
 			update_initial_values(&initial_value.vector, sys, iv); // in case system parameters have an effect on them
 			ct0=clock();
-			status|=simulate_timeseries(
+			status=simulate_timeseries(
 				sys,
 				driver,
 				t0,
@@ -1187,7 +1187,7 @@ r_gsl_odeiv2_outer_func(
 			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+nrows(parameters)*k, nrows(parameters)*sizeof(double));
 			update_initial_values(&initial_value.vector,sys,iv);
 			ct0 = clock();
-			status|=simulate_timeseries(
+			status=simulate_timeseries(
 				sys,
 				driver,
 				t0,
@@ -1307,7 +1307,7 @@ r_gsl_odeiv2_outer_sens(
 			memcpy((double*) sys.params, REAL(AS_NUMERIC(parameters))+nrows(parameters)*k, nrows(parameters)*sizeof(double));
 			update_initial_values(&initial_value.vector,sys,iv);
 			ct0=clock();
-			status|=simulate_timeseries(
+			status=simulate_timeseries(
 				sys,
 				driver,
 				t0,
